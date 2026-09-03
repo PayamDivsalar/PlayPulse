@@ -1,0 +1,640 @@
+<hr>
+<font face="B Mitra" size=5>
+<div dir=rtl>
+
+<font size=6>
+<b>طراحی پایگاه‌داده پروژه</b>
+</font>
+
+<br>
+<p align="justify">
+<font size=4>
+این سند اسکیمای جدول‌های پایگاه‌داده‌ی پروژه و منطق طراحی هر یک را مستند می‌کند. جدول‌ها به‌مرور که پروژه پیش می‌رود تکمیل خواهند شد.
+</font>
+</p>
+
+<hr>
+
+<font size=5>
+<b>۱. جدول Applications</b>
+</font>
+
+<br>
+<p align="justify">
+<font size=4>
+جدول مرکزی سیستم است که فهرست اپلیکیشن‌های تحت پایش را نگه می‌دارد. این جدول تنها <b>وضعیت فعلی لیست اپلیکیشن‌ها</b> را نمایش می‌دهد و شامل داده‌های آماری یا تاریخچه‌ای نیست؛ آن داده‌ها در جدول‌های جداگانه (app_stats، reviews، network_metrics) نگهداری می‌شوند تا هر بار کراول، رکورد جدید ایجاد شود بدون آنکه وضعیت لیست اپلیکیشن‌ها دستکاری شود.
+</font>
+</p>
+
+<font size=4>
+<b>دیاگرام (ER)</b>
+</font>
+
+</div>
+</font>
+
+```mermaid
+erDiagram
+    APPLICATIONS {
+        int id PK
+        string package_name UK "unique app identifier"
+        string display_name "optional, filled by crawler if empty"
+        string category "Play Store category"
+        boolean is_messaging_app "flags network analysis need"
+        boolean is_active "soft delete flag"
+        datetime created_at
+        datetime updated_at
+    }
+```
+
+<font face="B Mitra" size=5>
+<div dir=rtl>
+
+<font size=4>
+<b>مشخصات فیلدها</b>
+</font>
+
+<br>
+
+<table dir="rtl" align="right" style="width:100%; text-align:right; border-collapse:collapse;" border="1">
+<tr>
+<th>فیلد</th>
+<th>نوع داده</th>
+<th>ویژگی‌ها</th>
+<th>توضیح و دلیل طراحی</th>
+</tr>
+
+<tr>
+<td><code>id</code></td>
+<td>Integer</td>
+<td>Primary Key, Auto Increment</td>
+<td>کلید داخلی استاندارد جهت ارجاع سریع در روابط FK.</td>
+</tr>
+
+<tr>
+<td><code>package_name</code></td>
+<td>CharField(255)</td>
+<td>Unique, Not Null, Indexed</td>
+<td>شناسه‌ی یکتای اپ در Google Play (مثل com.whatsapp). چون سایر زیرسیستم‌ها (کراولر، تحلیل شبکه) بر اساس همین مقدار به اپ ارجاع می‌دهند نه id داخلی، Unique و Indexed بودن آن برای جلوگیری از رکورد تکراری و سرعت جست‌وجو ضروری است.</td>
+</tr>
+
+<tr>
+<td><code>display_name</code></td>
+<td>CharField(255)</td>
+<td>Nullable</td>
+<td>نام نمایشی اپ. اختیاری در نظر گرفته شده تا فرآیند Create ساده بماند (کاربر فقط package_name را وارد کند)؛ در صورت خالی بودن، در اولین اجرای کراولر از Play Store استخراج و تکمیل می‌شود.</td>
+</tr>
+
+<tr>
+<td><code>category</code></td>
+<td>CharField(100)</td>
+<td>Nullable</td>
+<td>دسته‌بندی رسمی اپ طبق Google Play، برای گزارش‌گیری‌های کلی در Metabase (مثل مقایسه‌ی امتیاز بر اساس دسته).</td>
+</tr>
+
+<tr>
+<td><code>is_messaging_app</code></td>
+<td>Boolean</td>
+<td>Default: False</td>
+<td>فلگ عملیاتی مجزا از category که مشخص می‌کند آیا این اپ نیازمند جمع‌آوری داده‌ی شبکه‌ای (pcap) است یا نه. جدا نگه‌داشتن آن از category باعث می‌شود منطق زیرسیستم شبکه با یک بررسی Boolean ساده انجام شود، بدون نیاز به مقایسه‌ی رشته‌ای روی مقدار دسته‌بندی.</td>
+</tr>
+
+<tr>
+<td><code>is_active</code></td>
+<td>Boolean</td>
+<td>Default: True</td>
+<td>پیاده‌سازی حذف نرم (Soft Delete) طبق نیازمندی API چهارم («غیرفعال کردن اپلیکیشن»، نه حذف فیزیکی). کراولر فقط رکوردهایی با is_active = True را پردازش می‌کند و داده‌ی تاریخی اپ‌های غیرفعال‌شده نیز دست‌نخورده باقی می‌ماند.</td>
+</tr>
+
+<tr>
+<td><code>created_at</code></td>
+<td>DateTime</td>
+<td>Auto (auto_now_add)</td>
+<td>زمان ثبت اولیه‌ی اپ در سیستم؛ برای Audit و بررسی روند رشد لیست.</td>
+</tr>
+
+<tr>
+<td><code>updated_at</code></td>
+<td>DateTime</td>
+<td>Auto (auto_now)</td>
+<td>زمان آخرین ویرایش رکورد لیست (نه داده‌ی آماری)؛ برای دیباگ و ردیابی تغییرات API چهارم (Update).</td>
+</tr>
+
+</table>
+
+<br>
+
+<font size=4>
+<b>تصمیمات طراحی</b>
+</font>
+
+<br>
+<p align="justify">
+<font size=4>
+<ul>
+<li><b>جداسازی وضعیت از تاریخچه:</b> این جدول عمداً هیچ فیلد آماری (امتیاز، تعداد نصب و ...) ندارد. علت آن است که این مقادیر در طول زمان تغییر می‌کنند و هدف پروژه تحلیل روند تغییرات آن‌هاست؛ نگه‌داری‌شان در همین جدول به معنای از دست دادن تاریخچه در هر Update خواهد بود. به همین دلیل این داده‌ها به جدول جداگانه‌ی app_stats که هر بار کراول یک رکورد جدید در آن درج می‌شود، منتقل شده‌اند.</li>
+<br>
+<li><b>Soft Delete به‌جای حذف واقعی:</b> چون سند صراحتاً واژه‌ی «غیرفعال کردن» را برای عملیات Delete به‌کار برده، حذف فیزیکی رکورد صحیح نیست؛ داده‌های تاریخی مرتبط با اپ (ریویوها، آمار قبلی) باید حتی پس از غیرفعال شدن اپ در پایگاه‌داده باقی بمانند.</li>
+<br>
+<li><b>package_name به‌جای id به‌عنوان کلید ارجاع بین‌سیستمی:</b> از آنجا که کراولر و زیرسیستم شبکه به‌صورت مستقل با اپ‌ها کار می‌کنند، استفاده از یک شناسه‌ی معنادار و پایدار (package_name) به‌جای کلید داخلی auto-increment، افزونگی و خطای انسانی در تطبیق داده را کاهش می‌دهد.</li>
+</ul>
+</font>
+</p>
+
+</div>
+</font>
+
+<hr>
+
+<font face="B Mitra" size=5>
+<div dir=rtl>
+
+<font size=5>
+<b>۲. جدول App Stats</b>
+</font>
+
+<br>
+<p align="justify">
+<font size=4>
+این جدول آمار کلی هر اپلیکیشن را که هر یک ساعت یک‌بار توسط زیرسیستم کراولر استخراج می‌شود، نگهداری می‌کند. برخلاف جدول applications که فقط وضعیت فعلی را نشان می‌دهد، این جدول ماهیت <b>Append-Only</b> دارد؛ یعنی هر بار کراول، به‌جای بازنویسی رکورد قبلی، یک رکورد جدید درج می‌شود تا امکان تحلیل روند تغییرات آماری در طول زمان (طبق نیازمندی بخش تحلیل داده) فراهم بماند.
+</font>
+</p>
+
+<font size=4>
+<b>دیاگرام (ER)</b>
+</font>
+
+</div>
+</font>
+
+```mermaid
+erDiagram
+    APPLICATIONS ||--o{ APP_STATS : "has many"
+    APPLICATIONS {
+        int id PK
+        string package_name UK
+    }
+    APP_STATS {
+        int id PK
+        int application_id FK
+        int min_installs
+        float score
+        float ratings
+        int reviews_count
+        datetime app_updated_at "last update on Play Store"
+        string version
+        boolean ad_supported
+        datetime crawled_at "our crawl timestamp"
+    }
+```
+
+<font face="B Mitra" size=5>
+<div dir=rtl>
+
+<font size=4>
+<b>مشخصات فیلدها</b>
+</font>
+
+<br>
+
+<table dir="rtl" align="right" style="width:100%; text-align:right; border-collapse:collapse;" border="1">
+<tr>
+<th>فیلد</th>
+<th>نوع داده</th>
+<th>ویژگی‌ها</th>
+<th>توضیح و دلیل طراحی</th>
+</tr>
+
+<tr>
+<td><code>id</code></td>
+<td>Integer</td>
+<td>Primary Key, Auto Increment</td>
+<td>کلید داخلی رکورد آماری. چون هر کراول یک رکورد جدید می‌سازد (نه Update)، این جدول به‌سرعت رشد می‌کند و id مستقل از application لازم است.</td>
+</tr>
+
+<tr>
+<td><code>application</code></td>
+<td>ForeignKey</td>
+<td>Not Null, on_delete=CASCADE, Indexed</td>
+<td>ارجاع به رکورد اپ در جدول applications. از CASCADE استفاده شده چون داده‌ی آماری بدون وجود اپ مادر بی‌معنی است؛ به‌طور خودکار توسط Django ایندکس می‌شود.</td>
+</tr>
+
+<tr>
+<td><code>min_installs</code></td>
+<td>BigInteger</td>
+<td>Not Null</td>
+<td>حداقل تعداد نصب اعلام‌شده در Play Store. از BigInteger استفاده شده چون اپ‌های پرنصب می‌توانند اعداد بزرگ‌تر از محدوده‌ی Integer معمولی داشته باشند.</td>
+</tr>
+
+<tr>
+<td><code>score</code></td>
+<td>Float</td>
+<td>Nullable</td>
+<td>امتیاز کلی اپ (عددی اعشاری مثل 4.3). Nullable در نظر گرفته شده چون اپ‌های تازه‌منتشرشده ممکن است هنوز امتیازی نداشته باشند.</td>
+</tr>
+
+<tr>
+<td><code>ratings</code></td>
+<td>BigInteger</td>
+<td>Nullable</td>
+<td>تعداد کل رتبه‌بندی‌های ثبت‌شده برای اپ.</td>
+</tr>
+
+<tr>
+<td><code>reviews_count</code></td>
+<td>BigInteger</td>
+<td>Nullable</td>
+<td>تعداد کل نقدهای نوشته‌شده برای اپ (متفاوت از تعداد نقدهایی که ما ذخیره می‌کنیم؛ این عدد از سمت Play Store گزارش می‌شود).</td>
+</tr>
+
+<tr>
+<td><code>version</code></td>
+<td>CharField(50)</td>
+<td>Nullable</td>
+<td>نسخه‌ی فعلی اپ. برخی اپ‌ها این مقدار را افشا نمی‌کنند، به همین دلیل Nullable است.</td>
+</tr>
+
+<tr>
+<td><code>ad_supported</code></td>
+<td>Boolean</td>
+<td>Nullable</td>
+<td>مشخص می‌کند آیا اپ از تبلیغات پشتیبانی می‌کند یا نه.</td>
+</tr>
+
+<tr>
+<td><code>app_updated_at</code></td>
+<td>DateTime</td>
+<td>Nullable</td>
+<td>زمانی که خودِ اپلیکیشن در Play Store آخرین‌بار به‌روزرسانی شده است. این فیلد <b>عمداً</b> از crawled_at جدا نگه‌داشته شده تا «زمان تغییر واقعی اپ» با «زمان ثبت داده توسط ما» قاطی نشود.</td>
+</tr>
+
+<tr>
+<td><code>crawled_at</code></td>
+<td>DateTime</td>
+<td>Not Null, Indexed</td>
+<td>زمان دقیقی که ما این رکورد را کراول کرده‌ایم. طبق سند، مبنای اصلی تحلیل روند در Metabase همین فیلد است؛ به همراه application در یک ایندکس مرکب قرار می‌گیرد.</td>
+</tr>
+
+</table>
+
+<br>
+
+<font size=4>
+<b>تصمیمات طراحی</b>
+</font>
+
+<br>
+<p align="justify">
+<font size=4>
+<ul>
+<li><b>ماهیت Append-Only:</b> این جدول هرگز رکورد موجود را Update نمی‌کند؛ هر اجرای کراولر یک ردیف جدید اضافه می‌کند. این تصمیم مستقیماً از نیاز پروژه به «تحلیل تغییرات آمار در گذر زمان» ناشی می‌شود؛ اگر رکورد بازنویسی می‌شد، امکان رسم نمودار Trend نصب‌ها یا امتیاز از بین می‌رفت.</li>
+<br>
+<li><b>ایندکس مرکب (application_id, crawled_at):</b> پرتکرارترین کوئری روی این جدول، هم از سمت Storage Consumer (بررسی آخرین رکورد ثبت‌شده برای یک اپ) و هم از سمت Metabase (رسم روند یک اپ خاص در طول زمان)، به‌صورت «فیلتر بر اساس اپ + مرتب‌سازی بر اساس زمان» است. برخلاف جدول applications که حجم کمی دارد، این جدول با نرخ (تعداد اپ × هر ساعت) رشد می‌کند و بدون این ایندکس، کوئری‌ها با گذشت زمان کند خواهند شد.</li>
+<br>
+<li><b>جداسازی app_updated_at از crawled_at:</b> این دو مفهوم متفاوت‌اند و قاطی کردنشان باعث تحلیل غلط می‌شود؛ یکی «چه زمانی اپ تغییر کرده» و دیگری «چه زمانی ما این تغییر را مشاهده کرده‌ایم» را نشان می‌دهد.</li>
+<li><b>on_delete=CASCADE به‌جای SET_NULL:</b> از آنجا که هدف پروژه Soft Delete در سطح applications است (نه حذف فیزیکی)، در عمل هرگز نباید یک application واقعاً حذف شود؛ CASCADE صرفاً برای یکپارچگی داده در سناریوهای غیرمنتظره (مثل پاک‌سازی دستی در توسعه) در نظر گرفته شده است.</li>
+</ul>
+</font>
+</p>
+
+</div>
+</font>
+
+<hr>
+
+<font face="B Mitra" size=5>
+<div dir=rtl>
+
+<font size=5>
+<b>۳. جدول Reviews</b>
+</font>
+
+<br>
+<p align="justify">
+<font size=4>
+این جدول نقدهای کاربران را برای هر اپلیکیشن نگهداری می‌کند. برخلاف دو جدول قبلی، این جدول ماهیت <b>Upsert</b> دارد؛ طبق نیازمندی صریح سند، داده‌ها باید بر اساس فیلد review_id پس از هر بار دریافت اطلاعات جدید به‌روزرسانی شوند، نه اینکه در هر کراول رکورد تکراری ایجاد شود. این تفاوت اساسی با جدول app_stats (که Append-Only بود) باید در سطح Unique Constraint روی review_id اعمال شود.
+</font>
+</p>
+
+<font size=4>
+<b>دیاگرام (ER)</b>
+</font>
+
+</div>
+</font>
+
+```mermaid
+erDiagram
+    APPLICATIONS ||--o{ REVIEWS : "has many"
+    APPLICATIONS {
+        int id PK
+        string package_name UK
+    }
+    REVIEWS {
+        int id PK
+        int application_id FK
+        string review_id UK "Play Store review identifier"
+        string user_name
+        int thumbs_up_count
+        float score
+        text content
+        datetime at "review timestamp on Play Store"
+        string sentiment "nullable, for bonus part"
+        datetime first_seen_at
+        datetime last_synced_at
+    }
+```
+
+<font face="B Mitra" size=5>
+<div dir=rtl>
+
+<font size=4>
+<b>مشخصات فیلدها</b>
+</font>
+
+<br>
+
+<table dir="rtl" align="right" style="width:100%; text-align:right; border-collapse:collapse;" border="1">
+<tr>
+<th>فیلد</th>
+<th>نوع داده</th>
+<th>ویژگی‌ها</th>
+<th>توضیح و دلیل طراحی</th>
+</tr>
+
+<tr>
+<td><code>id</code></td>
+<td>Integer</td>
+<td>Primary Key, Auto Increment</td>
+<td>کلید داخلی رکورد. با اینکه review_id شناسه‌ی معنادار است، برای سازگاری با روابط FK احتمالی آینده و کارایی بهتر Join، یک PK عددی مجزا نگه داشته می‌شود.</td>
+</tr>
+
+<tr>
+<td><code>application</code></td>
+<td>ForeignKey</td>
+<td>Not Null, on_delete=CASCADE, Indexed</td>
+<td>ارجاع به اپ مربوطه در applications. به‌طور خودکار توسط Django ایندکس می‌شود و در ایندکس مرکب زیر نیز استفاده می‌گردد.</td>
+</tr>
+
+<tr>
+<td><code>review_id</code></td>
+<td>CharField(255)</td>
+<td><b>Unique</b>, Not Null, Indexed</td>
+<td>شناسه‌ی یکتای نقد در Play Store. این فیلد ستون کلیدی برای عملیات Upsert است: پیش از درج، سیستم بر اساس این مقدار بررسی می‌کند که رکورد از قبل وجود دارد یا خیر.</td>
+</tr>
+
+<tr>
+<td><code>user_name</code></td>
+<td>CharField(255)</td>
+<td>Nullable</td>
+<td>نام کاربری نویسنده‌ی نقد. برخی کاربران این مقدار را در Play Store مخفی می‌کنند، بنابراین Nullable در نظر گرفته شده است.</td>
+</tr>
+
+<tr>
+<td><code>thumbs_up_count</code></td>
+<td>Integer</td>
+<td>Default: 0</td>
+<td>تعداد موافقت با نقد. این مقدار می‌تواند در طول زمان تغییر کند، به همین دلیل باید در هر Sync به‌روزرسانی شود؛ دلیل اصلی نیاز پروژه به Upsert همین فیلد است.</td>
+</tr>
+
+<tr>
+<td><code>score</code></td>
+<td>SmallInteger</td>
+<td>Not Null</td>
+<td>امتیاز داده‌شده در همان نقد (عددی بین ۱ تا ۵). از SmallInteger استفاده شده چون بازه‌ی مقدار محدود و مشخص است.</td>
+</tr>
+
+<tr>
+<td><code>content</code></td>
+<td>TextField</td>
+<td>Nullable</td>
+<td>متن نقد. از TextField (نه CharField) استفاده شده چون طول متن نامحدود و متغیر است؛ Nullable چون برخی کاربران فقط امتیاز می‌دهند بدون نوشتن متن.</td>
+</tr>
+
+<tr>
+<td><code>at</code></td>
+<td>DateTime</td>
+<td>Not Null, Indexed</td>
+<td>زمانی که کاربر نقد را در Play Store ثبت کرده است. مبنای اصلی تحلیل روند امتیاز نقدها در طول زمان در Metabase.</td>
+</tr>
+
+<tr>
+<td><code>sentiment</code></td>
+<td>CharField(20)</td>
+<td>Nullable, Choices: POSITIVE / NEUTRAL / NEGATIVE</td>
+<td>نتیجه‌ی تحلیل احساسات متن نقد (بخش امتیازی پروژه). از همین مرحله اضافه شده تا در پیاده‌سازی بخش Sentiment Analysis نیازی به تغییر ساختاری جدول نباشد؛ Nullable است چون تا پیش از اجرای آن ماژول مقداردهی نمی‌شود.</td>
+</tr>
+
+<tr>
+<td><code>first_seen_at</code></td>
+<td>DateTime</td>
+<td>Auto (auto_now_add)</td>
+<td>اولین باری که این نقد توسط سیستم دیده و ذخیره شده است. این مقدار هرگز تغییر نمی‌کند، حتی اگر رکورد بعداً Upsert شود.</td>
+</tr>
+
+<tr>
+<td><code>last_synced_at</code></td>
+<td>DateTime</td>
+<td>Auto (auto_now)</td>
+<td>آخرین باری که این رکورد از Play Store همگام‌سازی شده است. با هر Upsert به‌روز می‌شود و مشخص می‌کند آیا یک نقد اخیراً تغییر کرده (مثلاً افزایش thumbs_up_count) یا نه.</td>
+</tr>
+
+</table>
+
+<br>
+
+<font size=4>
+<b>تصمیمات طراحی</b>
+</font>
+
+<br>
+<p align="justify">
+<font size=4>
+<ul>
+<li><b>Unique Constraint روی review_id به‌جای Append-Only:</b> این مهم‌ترین تفاوت این جدول با app_stats است. طبق نیازمندی صریح سند، هدف حفظ آخرین نسخه‌ی هر نقد است، نه تاریخچه‌ی کامل تغییرات آن؛ بنابراین بدون این محدودیت Unique، عملاً امکان پیاده‌سازی رفتار Upsert خواسته‌شده وجود نخواهد داشت.</li>
+<br>
+<li><b>ایندکس مرکب (application_id, at):</b> با توجه به حجم بسیار بالای این جدول (تا سقف ۱۰۰۰ نقد به‌ازای هر اپ و افزایش مداوم آن)، این ایندکس برای کوئری اصلی Metabase — یعنی «روند امتیاز نقدهای یک اپ خاص در طول زمان» — ضروری‌تر از حالت مشابه در app_stats است، چون بدون آن جست‌وجو در حجم انبوه داده به‌شدت کند خواهد شد.</li>
+<br>
+<li><b>جداسازی first_seen_at از last_synced_at:</b> این دو مفهوم متفاوت‌اند: اولی نشان می‌دهد یک نقد از چه زمانی برای ما شناخته‌شده است (برای تحلیل‌هایی مثل «چند نقد جدید در این هفته دریافت شده»)، و دومی نشان می‌دهد آخرین‌بار چه زمانی وضعیت آن (مثل تعداد Like) بررسی شده است. تفکیک این دو، امکان تحلیل دقیق‌تر رفتار داده در طول زمان را فراهم می‌کند.</li>
+<br>
+<li><b>افزودن زودهنگام فیلد sentiment:</b> با اینکه پیاده‌سازی تحلیل احساسات بخش امتیازی و اختیاری پروژه است، افزودن این فیلد از همین مرحله باعث می‌شود در آینده فقط منطق پردازش اضافه شود، بدون نیاز به Migration ساختاری جدید یا بازنویسی رکوردهای موجود.</li>
+</ul>
+</font>
+</p>
+
+</div>
+</font>
+
+<hr>
+
+<font face="B Mitra" size=5>
+<div dir=rtl>
+
+<font size=5>
+<b>۴. جدول Network Metrics</b>
+</font>
+
+<br>
+<p align="justify">
+<font size=4>
+این جدول نتایج تحلیل فایل‌های pcap ضبط‌شده با PCAPdroid را نگهداری می‌کند. برخلاف سه جدول قبلی که ورودی‌شان به‌صورت خودکار و زمان‌بندی‌شده (هر ساعت) تولید می‌شود، ورودی این جدول از یک فرآیند دستی و آفلاین (ضبط ترافیک توسط تستر) می‌آید و فقط برای اپلیکیشن‌های دسته‌ی گپ‌وگفت تکمیل می‌شود. هر رکورد این جدول معادل تحلیل یک فایل pcap برای یک سناریوی مشخص (ارسال یا دریافت فایل) است.
+</font>
+</p>
+
+<font size=4>
+<b>دیاگرام (ER)</b>
+</font>
+
+</div>
+</font>
+
+```mermaid
+erDiagram
+    APPLICATIONS ||--o{ NETWORK_METRICS : "has many"
+    APPLICATIONS {
+        int id PK
+        string package_name UK
+    }
+    NETWORK_METRICS {
+        int id PK
+        int application_id FK
+        string scenario "UPLOAD or DOWNLOAD"
+        float rtt_handshake
+        int retransmission_count
+        int zero_window_count
+        int tcp_reset_count
+        bigint bytes_transferred_total
+        bigint bytes_payload_total
+        float overhead_ratio
+        string source_pcap_filename "for traceability"
+        datetime analyzed_at
+    }
+```
+
+<font face="B Mitra" size=5>
+<div dir=rtl>
+
+<font size=4>
+<b>مشخصات فیلدها</b>
+</font>
+
+<br>
+
+<table dir="rtl" align="right" style="width:100%; text-align:right; border-collapse:collapse;" border="1">
+<tr>
+<th>فیلد</th>
+<th>نوع داده</th>
+<th>ویژگی‌ها</th>
+<th>توضیح و دلیل طراحی</th>
+</tr>
+
+<tr>
+<td><code>id</code></td>
+<td>Integer</td>
+<td>Primary Key, Auto Increment</td>
+<td>کلید داخلی رکورد تحلیل شبکه.</td>
+</tr>
+
+<tr>
+<td><code>application</code></td>
+<td>ForeignKey</td>
+<td>Not Null, on_delete=CASCADE, Indexed</td>
+<td>ارجاع به اپ مربوطه در applications. عملاً فقط اپ‌هایی با is_messaging_app=True در این جدول رکورد خواهند داشت.</td>
+</tr>
+
+<tr>
+<td><code>scenario</code></td>
+<td>CharField(20)</td>
+<td>Not Null, Choices: UPLOAD / DOWNLOAD</td>
+<td>نوع سناریوی ضبط‌شده طبق نیازمندی سند (ارسال فایل یا دریافت/دانلود فایل). لازم است تا در تحلیل بتوان رفتار شبکه را جدا برای هر سناریو مقایسه کرد.</td>
+</tr>
+
+<tr>
+<td><code>rtt_handshake</code></td>
+<td>Float</td>
+<td>Nullable</td>
+<td>میانگین زمان بین ارسال بسته‌ی آغاز اتصال (SYN) و دریافت پاسخ تأیید آن (SYN-ACK)، بر حسب میلی‌ثانیه. Nullable چون ممکن است در برخی فایل‌های pcap اصلاً handshake جدیدی ثبت نشده باشد (اتصال از قبل برقرار بوده).</td>
+</tr>
+
+<tr>
+<td><code>retransmission_count</code></td>
+<td>Integer</td>
+<td>Default: 0</td>
+<td>تعداد بسته‌های بازفرستاده‌شده به دلیل عدم دریافت تأیید در شبکه.</td>
+</tr>
+
+<tr>
+<td><code>zero_window_count</code></td>
+<td>Integer</td>
+<td>Default: 0</td>
+<td>تعداد رخدادهای اعلام تکمیل ظرفیت بافر سمت گیرنده (TCP Zero Window) در طول تبادل داده.</td>
+</tr>
+
+<tr>
+<td><code>tcp_reset_count</code></td>
+<td>Integer</td>
+<td>Default: 0</td>
+<td>تعداد بسته‌های حاوی نشانه‌ی قطع ناگهانی ارتباط (پرچم RST).</td>
+</tr>
+
+<tr>
+<td><code>bytes_transferred_total</code></td>
+<td>BigInteger</td>
+<td>Not Null</td>
+<td>مجموع کل حجم بسته‌های ثبت‌شده در فایل pcap. از BigInteger استفاده شده چون حجم ترافیک، به‌خصوص در سناریوی ارسال/دریافت فایل، می‌تواند به‌سرعت از محدوده‌ی Integer معمولی عبور کند.</td>
+</tr>
+
+<tr>
+<td><code>bytes_payload_total</code></td>
+<td>BigInteger</td>
+<td>Not Null</td>
+<td>مجموع حجم خالص داده‌های مبادله‌شده، بدون احتساب هدرهای لایه‌های شبکه.</td>
+</tr>
+
+<tr>
+<td><code>overhead_ratio</code></td>
+<td>Float</td>
+<td>Not Null</td>
+<td>نسبت حجم هدرها به کل ترافیک (۱ منهای نسبت Payload به Total). این فیلد از دو فیلد بالا مشتق می‌شود اما به‌صورت مجزا نیز ذخیره می‌شود تا کوئری‌های Metabase نیازی به محاسبه‌ی مجدد در زمان نمایش نداشته باشند.</td>
+</tr>
+
+<tr>
+<td><code>source_pcap_filename</code></td>
+<td>CharField(255)</td>
+<td>Nullable</td>
+<td>نام یا مسیر فایل pcap اصلی که این رکورد از آن استخراج شده است. این فیلد در سند خواسته نشده اما برای Traceability اضافه شده: در صورت مشاهده‌ی یک مقدار غیرعادی (مثلاً RTT بسیار بالا)، امکان بازگشت به فایل خام و بررسی دستی وجود خواهد داشت.</td>
+</tr>
+
+<tr>
+<td><code>analyzed_at</code></td>
+<td>DateTime</td>
+<td>Auto (auto_now_add)</td>
+<td>زمانی که این فایل pcap توسط سیستم تحلیل شده است؛ توجه شود این زمان با زمان واقعی ضبط ترافیک توسط PCAPdroid متفاوت است، چون فرآیند تحلیل به‌صورت دستی و آفلاین انجام می‌شود.</td>
+</tr>
+
+</table>
+
+<br>
+
+<font size=4>
+<b>تصمیمات طراحی</b>
+</font>
+
+<br>
+<p align="justify">
+<font size=4>
+<ul>
+<li><b>عدم نیاز به Unique Constraint:</b> برخلاف reviews، این جدول نیازی به Upsert ندارد؛ هر بار تحلیل یک فایل pcap جدید، یک رکورد کاملاً مستقل و جدید است (حتی اگر برای همان اپ و همان سناریو باشد، چون می‌توان همان تست را چند بار در شرایط مختلف تکرار کرد).</li>
+<br>
+<li><b>ثبت overhead_ratio به‌صورت مجزا:</b> با اینکه این مقدار از bytes_payload_total و bytes_transferred_total قابل محاسبه است، ذخیره‌ی مستقیم آن باعث می‌شود Metabase بدون نیاز به Custom SQL یا Calculated Field، مستقیماً بتواند نمودار بکشد؛ این تصمیم سادگی کوئری‌های تحلیلی را در اولویت قرار می‌دهد.</li>
+<br>
+<li><b>افزودن source_pcap_filename فراتر از نیازمندی سند:</b> اگرچه سند این فیلد را نخواسته، وجود آن هزینه‌ی طراحی ناچیزی دارد (یک فیلد Nullable) در مقابل ارزش بالای آن برای اعتبارسنجی و دیباگ نتایج تحلیل شبکه، به‌خصوص در بخشی از پروژه که به دلیل ماهیت دستی و پیچیده‌ی pcap parsing بیشتر مستعد خطاست.</li>
+<br>
+<li><b>عدم استفاده از ایندکس مرکب اضافه:</b> برخلاف reviews و app_stats، حجم این جدول به‌طور طبیعی محدود است (فقط اپ‌های گپ‌وگفت × دو سناریو × تعداد محدود اجرای تست)، بنابراین ایندکس پیش‌فرض روی application (از طریق FK) برای نیازهای فعلی کافی است.</li>
+</ul>
+</font>
+</p>
+
+</div>
+</font>
+<hr>
