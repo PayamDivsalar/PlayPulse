@@ -1,33 +1,26 @@
 <hr>
-<font face="B Mitra" size=5>
-<div dir=rtl>
 
-<font size=6>
-<b>زیرسیستم ذخیره لیست اپلیکیشن‌ها (Application Registry)</b>
-</font>
+<div dir="rtl">
 
-<br>
+<h1>زیرسیستم ذخیره لیست اپلیکیشن‌ها (Application Registry)</h1>
+
 <p align="justify">
-<font size=4>
 این مستند معماری، فلوی درخواست‌ها، و تصمیمات مهندسی زیرسیستم مدیریت لیست اپلیکیشن‌ها را که با <b>Django REST Framework</b> پیاده‌سازی شده، شرح می‌دهد. این زیرسیستم مسئول عملیات Create/Read/Update/Deactivate روی فهرست اپلیکیشن‌های تحت پایش پروژه است و به‌عنوان منبع حقیقت (Source of Truth) برای زیرسیستم کراولر عمل می‌کند.
-</font>
-</p>
-
-<hr>
-
-<font size=5>
-<b>۱. معماری لایه‌ای</b>
-</font>
-
-<br>
-<p align="justify">
-<font size=4>
-به‌جای نوشتن منطق کسب‌وکار مستقیم داخل View ها (اشتباه رایج در پروژه‌های Django)، این زیرسیستم بر اساس یک <b>معماری لایه‌ای سبک</b> طراحی شده که مسئولیت‌ها را طبق اصل Single Responsibility Principle جدا می‌کند.
-</font>
 </p>
 
 </div>
-</font>
+
+<hr>
+
+<div dir="rtl">
+
+<h2>۱. معماری لایه‌ای</h2>
+
+<p align="justify">
+به‌جای نوشتن منطق کسب‌وکار مستقیم داخل View ها (اشتباه رایج در پروژه‌های Django)، این زیرسیستم بر اساس یک <b>معماری لایه‌ای سبک</b> طراحی شده که مسئولیت‌ها را طبق اصل Single Responsibility Principle جدا می‌کند.
+</p>
+
+</div>
 
 ```mermaid
 flowchart TD
@@ -47,8 +40,7 @@ flowchart TD
     style F fill:#7c3aed,color:#fff
 ```
 
-<font face="B Mitra" size=5>
-<div dir=rtl>
+<div dir="rtl">
 
 <table dir="rtl" align="right" style="width:100%; text-align:right; border-collapse:collapse;" border="1">
 <tr>
@@ -84,26 +76,18 @@ flowchart TD
 </table>
 
 </div>
-</font>
 
 <hr>
 
-<font face="B Mitra" size=5>
-<div dir=rtl>
+<div dir="rtl">
 
-<font size=5>
-<b>۲. فلوی درخواست: ساخت اپلیکیشن جدید (Create)</b>
-</font>
+<h2>۲. فلوی درخواست: ساخت اپلیکیشن جدید (Create)</h2>
 
-<br>
 <p align="justify">
-<font size=4>
 این دیاگرام دقیق‌ترین مسیر یک درخواست را در سیستم نشان می‌دهد — از لحظه‌ی ورود Request تا برگشت Response، شامل مسیر شکست (خطا) در صورت تکراری بودن.
-</font>
 </p>
 
 </div>
-</font>
 
 ```mermaid
 sequenceDiagram
@@ -136,24 +120,17 @@ sequenceDiagram
     end
 ```
 
-<font face="B Mitra" size=5>
-<div dir=rtl>
-
 <hr>
 
-<font size=5>
-<b>۳. فلوی درخواست: غیرفعال‌سازی اپلیکیشن (Deactivate)</b>
-</font>
+<div dir="rtl">
 
-<br>
+<h2>۳. فلوی درخواست: غیرفعال‌سازی اپلیکیشن (Deactivate)</h2>
+
 <p align="justify">
-<font size=4>
 این عملیات به‌صورت <b>Idempotent</b> طراحی شده است — یعنی فراخوانی مکرر آن روی یک اپ از قبل غیرفعال، همچنان با موفقیت (نه خطا) پاسخ می‌دهد. این تصمیم آگاهانه از اصول طراحی REST پیروی می‌کند.
-</font>
 </p>
 
 </div>
-</font>
 
 ```mermaid
 sequenceDiagram
@@ -180,16 +157,11 @@ sequenceDiagram
     end
 ```
 
-<font face="B Mitra" size=5>
-<div dir=rtl>
-
 <hr>
 
-<font size=5>
-<b>۴. نقشه‌ی کامل Endpoint ها</b>
-</font>
+<div dir="rtl">
 
-<br>
+<h2>۴. نقشه‌ی کامل Endpoint ها</h2>
 
 <table dir="rtl" align="right" style="width:100%; text-align:right; border-collapse:collapse;" border="1">
 <tr>
@@ -236,69 +208,47 @@ sequenceDiagram
 </tr>
 </table>
 
-<br>
 <p align="justify">
-<font size=4>
 مستندات تعاملی و کامل این Endpoint ها به‌صورت خودکار (Swagger/OpenAPI) در آدرس <code>/swagger/</code> در دسترس است و شامل نمونه‌ی Request/Response برای هر عملیات می‌باشد.
-</font>
 </p>
 
 </div>
-</font>
 
 <hr>
 
-<font face="B Mitra" size=5>
-<div dir=rtl>
+<div dir="rtl">
 
-<font size=5>
-<b>۵. تصمیمات کلیدی طراحی</b>
-</font>
+<h2>۵. تصمیمات کلیدی طراحی</h2>
 
-<br>
 <div align="justify">
-<font size=4>
-<ul>
 
+<ul>
 <li><b>Soft Delete به‌جای حذف فیزیکی:</b> عملیات «حذف» در واقع فقط پرچم <code>is_active</code> را <code>False</code> می‌کند. این تصمیم مستقیماً از نیازمندی سند پروژه («غیرفعال کردن اپلیکیشن») گرفته شده و تضمین می‌کند داده‌های تاریخی (ریویوها، آمار) هرگز از دست نروند.</li>
-<br>
 
 <li><b>Idempotent بودن Deactivate/Reactivate:</b> فراخوانی مکرر این عملیات‌ها خطا تولید نمی‌کند، طبق بهترین‌شیوه‌های طراحی REST API؛ کلاینت نیازی به بررسی وضعیت فعلی قبل از فراخوانی ندارد.</li>
-<br>
 
 <li><b>تغییرناپذیری package_name:</b> این فیلد شناسه‌ی ارجاعی تمام زیرسیستم‌های دیگر (کراولر، صف پیام) است؛ به همین دلیل پس از ساخت اولیه غیرقابل‌تغییر است. این قانون هم در Serializer (فیلد read-only در ویرایش) و هم در Service (بررسی صریح) اعمال شده — دفاع دو لایه‌ای در برابر خطای انسانی یا برنامه‌نویسی.</li>
-<br>
 
 <li><b>مدیریت خطای دامنه به‌صورت مرکزی:</b> به‌جای تکرار <code>try/except</code> در هر View، خطاهای دامنه (<code>ApplicationAlreadyExistsException</code>, <code>ApplicationNotFoundException</code>, ...) توسط یک Exception Handler مرکزی به کد HTTP مناسب (409، 404، 400) نگاشت می‌شوند. این معماری از اصل DRY و Open/Closed Principle پیروی می‌کند: افزودن خطای جدید نیازی به تغییر View های موجود ندارد.</li>
-<br>
 
 <li><b>عدم استفاده از Dependency Injection کلاسیک:</b> این یک تصمیم آگاهانه است، نه کمبود. Django ذاتاً بر پایه‌ی الگوی Active Record ساخته شده و DI کامل (تزریق Repository به‌جای دسترسی مستقیم ORM) در این مقیاس هزینه‌ی مهندسی بیشتری نسبت به فایده‌اش دارد؛ به‌خصوص که استراتژی تست این پروژه بر پایه‌ی Integration Test با دیتابیس واقعی است، نه Unit Test کاملاً مجزا با Mock.</li>
-
 </ul>
-</font>
+
 </div>
 
 </div>
-</font>
 
 <hr>
 
-<font face="B Mitra" size=5>
-<div dir=rtl>
+<div dir="rtl">
 
-<font size=5>
-<b>۶. استراتژی تست</b>
-</font>
+<h2>۶. استراتژی تست</h2>
 
-<br>
 <p align="justify">
-<font size=4>
 تست‌ها مطابق اصل Test Pyramid، از پایین‌ترین لایه به بالاترین لایه نوشته شده‌اند تا هم سرعت اجرا و هم پوشش کامل مسیر HTTP تضمین شود.
-</font>
 </p>
 
 </div>
-</font>
 
 ```mermaid
 flowchart TD
@@ -310,8 +260,7 @@ flowchart TD
     style C fill:#2563eb,color:#fff
 ```
 
-<font face="B Mitra" size=5>
-<div dir=rtl>
+<div dir="rtl">
 
 <table dir="rtl" align="right" style="width:100%; text-align:right; border-collapse:collapse;" border="1">
 <tr>
@@ -333,19 +282,12 @@ flowchart TD
 </table>
 
 </div>
-</font>
 
 <hr>
 
-<font face="B Mitra" size=5>
-<div dir=rtl>
+<div dir="rtl">
 
-<font size=5>
-<b>۷. ابزارها و تکنولوژی‌های استفاده‌شده</b>
-</font>
-
-<br>
-
+<h2>۷. ابزارها و تکنولوژی‌های استفاده‌شده</h2>
 
 <table dir="rtl" align="right" style="width:100%; text-align:right; border-collapse:collapse;" border="1">
 <tr>
@@ -374,14 +316,10 @@ flowchart TD
 </tr>
 </table>
 
-
-<br>
 <p align="justify">
-<font size=4>
 این زیرسیستم به‌عنوان اولین ماژول کاملاً پیاده‌سازی‌شده‌ی پروژه، پایه‌ی الگوی معماری (Service Layer + Exception Handling مرکزی) را برای زیرسیستم‌های بعدی (کراولر، تحلیل شبکه) نیز فراهم می‌کند.
-</font>
 </p>
 
 </div>
-</font>
+
 <hr>
