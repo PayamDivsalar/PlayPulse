@@ -256,7 +256,7 @@ sequenceDiagram
 </font>
 
 <br>
-<p align="justify">
+<div align="justify">
 <font size=4>
 <ul>
 
@@ -276,7 +276,7 @@ sequenceDiagram
 
 </ul>
 </font>
-</p>
+</div>
 
 </div>
 </font>
@@ -346,6 +346,7 @@ flowchart TD
 
 <br>
 
+
 <table dir="rtl" align="right" style="width:100%; text-align:right; border-collapse:collapse;" border="1">
 <tr>
 <th>ابزار</th>
@@ -372,6 +373,7 @@ flowchart TD
 <td>مدیریت پیکربندی محیطی (env variables)</td>
 </tr>
 </table>
+
 
 <br>
 <p align="justify">
