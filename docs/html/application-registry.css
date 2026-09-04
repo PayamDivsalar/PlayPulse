@@ -1,0 +1,68 @@
+:root {
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --green: #16a34a;
+  --bg: #f4f7fb;
+  --surface: #ffffff;
+  --text: #1e293b;
+  --muted: #64748b;
+  --border: #e2e8f0;
+  --code-bg: #f1f5f9;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: "Vazirmatn", Tahoma, sans-serif;
+  line-height: 2; direction: rtl;
+}
+.hero {
+  background: linear-gradient(135deg, #0f172a, #1e3a8a);
+  color: #fff; padding: 58px 24px 52px;
+}
+.hero-inner, .nav-inner, .container { max-width: 1180px; margin: 0 auto; }
+.eyebrow { direction:ltr; display:block; letter-spacing:2px; font-size:.78rem; opacity:.7; }
+.hero h1 { margin:10px 0; font-size:2.25rem; line-height:1.5; }
+.hero h1 span { direction:ltr; display:inline-block; font-size:1.35rem; font-weight:400; opacity:.75; }
+.hero p { margin:0; color:#cbd5e1; }
+.top-nav { position:sticky; top:0; z-index:100; background:rgba(255,255,255,.96); border-bottom:1px solid var(--border); backdrop-filter:blur(10px); }
+.nav-inner { display:flex; gap:6px; padding:8px 16px; overflow-x:auto; }
+.nav-inner a { white-space:nowrap; text-decoration:none; color:var(--muted); padding:7px 10px; border-radius:7px; font-size:.88rem; }
+.nav-inner a:hover { color:var(--primary); background:#eff6ff; }
+.container { background:var(--surface); margin-top:30px; margin-bottom:30px; padding:20px 55px 55px; border:1px solid var(--border); border-radius:16px; box-shadow:0 12px 40px rgba(15,23,42,.05); }
+section { padding:40px 0; border-bottom:1px solid var(--border); scroll-margin-top:65px; }
+section:last-child { border-bottom:0; }
+.intro { padding-top:20px; font-size:1.05rem; }
+p { text-align:justify; margin:0 0 18px; }
+h2 { font-size:1.55rem; margin:0 0 24px; color:#0f172a; display:flex; align-items:center; gap:10px; }
+.section-number { background:var(--primary); color:#fff; width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center; border-radius:9px; font-size:1rem; }
+h3 { margin:0 0 8px; font-size:1.03rem; color:#0f172a; }
+.diagram-card { direction:ltr; overflow-x:auto; margin:30px 0; padding:24px; border:1px solid var(--border); border-radius:12px; background:#fff; }
+.mermaid { min-width:max-content; text-align:center; }
+.table-wrapper { overflow-x:auto; margin:25px 0; border:1px solid var(--border); border-radius:10px; }
+table { width:100%; border-collapse:collapse; min-width:700px; }
+th { background:#eff6ff; color:#1e3a8a; font-weight:700; }
+th,td { padding:15px 16px; border-bottom:1px solid var(--border); text-align:right; vertical-align:top; }
+tbody tr:last-child td { border-bottom:0; }
+tbody tr:hover { background:#f8fafc; }
+code { direction:ltr; unicode-bidi:embed; display:inline-block; font-family:Consolas, monospace; background:var(--code-bg); padding:2px 6px; border-radius:5px; font-size:.9em; color:#334155; }
+.method { direction:ltr; display:inline-block; padding:2px 8px; border-radius:999px; font-size:.78rem; font-weight:700; }
+.get { color:#166534; background:#dcfce7; }
+.post { color:#1d4ed8; background:#dbeafe; }
+.patch { color:#92400e; background:#fef3c7; }
+.note { padding:16px 18px; border-right:4px solid var(--primary); background:#eff6ff; border-radius:8px; }
+.decision-list { display:grid; gap:16px; }
+.decision { background:#f8fafc; border:1px solid var(--border); border-right:4px solid var(--primary); border-radius:10px; padding:18px 20px; }
+.decision p { margin:0; }
+.closing { margin-top:25px; padding:20px; background:#f8fafc; border-radius:10px; }
+footer { text-align:center; color:var(--muted); padding:30px; font-size:.9rem; }
+footer p { text-align:center; }
+@media (max-width:768px) {
+  .hero { padding:35px 20px; }
+  .hero h1 { font-size:1.65rem; }
+  .container { margin:0; padding:15px 20px 30px; border-radius:0; border-left:0; border-right:0; }
+  section { padding:30px 0; }
+  h2 { font-size:1.3rem; }
+  .diagram-card { padding:12px; }
+}
+.portal-back{position:fixed;left:20px;bottom:20px;z-index:9999;background:#fff;color:#2563eb;border:1px solid #e2e8f0;padding:8px 14px;border-radius:10px;text-decoration:none;font-size:.82rem;box-shadow:0 6px 18px rgba(15,23,42,.12);line-height:1.5}.portal-back:hover{background:#eff6ff}
