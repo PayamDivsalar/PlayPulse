@@ -1,0 +1,193 @@
+<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>مستندات تست زیرساخت پروژه (Infrastructure Setup & Testing) | مستندات پروژه</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="style.css"></head><body><header class="site-header"><div class="header-inner"><a class="brand" href="index.html">مستندات فنی پروژه</a><nav><a href="index.html">خانه</a><a href="application-registry.html">Application Registry</a><a href="database-schema.html">Database Schema</a><a href="infra-setup.html">Infrastructure</a></nav></div></header><main class="page"><div class="page-title"><span class="eyebrow">TECHNICAL DOCUMENTATION</span><h1>مستندات تست زیرساخت پروژه (Infrastructure Setup & Testing)</h1></div><article class="doc-content"><hr>
+<div dir="rtl">
+<p><b>مستندات تست زیرساخت پروژه</b></p>
+<br>
+<p align="justify">
+<p>پیش از شروع پیاده‌سازی هر بخش از منطق برنامه (Django، Crawler و …)، لازم بود از سلامت و آماده‌به‌کار بودن زیرساخت پایه‌ی پروژه (PostgreSQL و Kafka) اطمینان حاصل شود. برای این منظور، به‌جای بررسی دستی و پراکنده، یک اسکریپت Smoke Test خودکار در مسیر <code>scripts/check_infra.sh</code> نوشته شده است که این بررسی را به‌صورت یکپارچه و تکرارپذیر انجام می‌دهد.</p>
+</p>
+<p><b>پیش‌نیازها</b></p>
+<br>
+<p align="justify">
+<p>پیش از اجرای اسکریپت باید موارد زیر انجام شده باشد:</p>
+</p>
+<ol>
+<li>
+فایل <code>.env</code> بر اساس نمونه‌ی موجود ساخته و مقادیر آن تنظیم شده باشد.
+</li>
+<li>
+سرویس‌های زیرساختی با دستور زیر بالا آمده باشند:
+</li>
+</ol>
+</div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">cp</span> .env.example .env</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co"># edit the .env values</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="ex">docker</span> compose up <span class="at">-d</span> postgres zookeeper kafka</span></code></pre></div>
+<div dir=rtl>
+
+<hr>
+<p><b>نحوه‌ی اجرای اسکریپت</b></p>
+<p><br></p>
+</div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">chmod</span> +x scripts/check_infra.sh</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./scripts/check_infra.sh</span></span></code></pre></div>
+<div dir=rtl>
+
+<hr>
+<p><b>روند بررسی اسکریپت</b></p>
+<br>
+<p align="justify">
+<p>اسکریپت به‌ترتیب دو بخش زیرساخت را بررسی می‌کند و در پایان یک گزارش خلاصه ارائه می‌دهد.</p>
+</p>
+<p><b>بخش اول: PostgreSQL</b></p>
+<p><br></p>
+<table dir="rtl" align="right" style="width:100%; text-align:right; border-collapse:collapse;" border="1">
+<tr>
+<th>
+مرحله
+</th>
+<th>
+هدف از انجام آن
+</th>
+</tr>
+<tr>
+<td>
+بررسی اجرا بودن کانتینر
+</td>
+<td>
+اطمینان از این‌که کانتینر Postgres اصلاً بالا آمده و متوقف یا Crash نشده است.
+</td>
+</tr>
+<tr>
+<td>
+بررسی آماده‌به‌کار بودن (pg_isready)
+</td>
+<td>
+تشخیص لحظه‌ای که Postgres کاملاً برای پذیرش اتصال آماده شده؛ چون بین «بالا آمدن کانتینر» و «آماده شدن دیتابیس» معمولاً چند ثانیه فاصله وجود دارد.
+</td>
+</tr>
+<tr>
+<td>
+تست واقعی نوشتن و خواندن
+</td>
+<td>
+ساخت یک جدول موقت، درج یک ردیف، خواندن آن، و حذف جدول. این تست فراتر از یک Ping ساده است و اطمینان می‌دهد کاربر و پایگاه‌داده تعریف‌شده در .env واقعاً قابل استفاده‌اند.
+</td>
+</tr>
+</table>
+<p><br></p>
+<p><b>بخش دوم: Kafka</b></p>
+<p><br></p>
+<table dir="rtl" align="right" style="width:100%; text-align:right; border-collapse:collapse;" border="1">
+<tr>
+<th>
+مرحله
+</th>
+<th>
+هدف از انجام آن
+</th>
+</tr>
+<tr>
+<td>
+بررسی اجرا بودن کانتینر
+</td>
+<td>
+اطمینان از بالا بودن کانتینر Kafka.
+</td>
+</tr>
+<tr>
+<td>
+بررسی در دسترس بودن بروکر
+</td>
+<td>
+تایید این‌که بروکر Kafka به درخواست‌های API پاسخ می‌دهد (نشانه‌ی اتصال موفق به Zookeeper و آماده بودن کامل بروکر).
+</td>
+</tr>
+<tr>
+<td>
+ساخت Topic تستی
+</td>
+<td>
+بررسی این‌که عملیات مدیریتی (ساخت Topic) که بعداً Crawler و Storage Consumer به آن نیاز دارند، بدون خطا انجام می‌شود.
+</td>
+</tr>
+<tr>
+<td>
+ارسال پیام (Produce)
+</td>
+<td>
+شبیه‌سازی رفتار واقعی Crawler که قرار است داده در Kafka بنویسد.
+</td>
+</tr>
+<tr>
+<td>
+خواندن پیام (Consume) و تطبیق محتوا
+</td>
+<td>
+شبیه‌سازی رفتار Storage Consumer؛ همچنین اطمینان از این‌که پیام دریافتی دقیقاً با پیام ارسالی یکسان است (نه صرفاً وجود دارد).
+</td>
+</tr>
+<tr>
+<td>
+پاکسازی (حذف Topic تستی)
+</td>
+<td>
+جلوگیری از باقی ماندن داده‌ی تستی در Kafka که ممکن است بعداً با Topic های واقعی پروژه اشتباه گرفته شود.
+</td>
+</tr>
+</table>
+<hr>
+<p><b>خروجی و نحوه‌ی تفسیر آن</b></p>
+<br>
+<p align="justify">
+<p>اسکریپت برای هر مرحله یکی از سه وضعیت زیر را نمایش می‌دهد:</p>
+</p>
+<ul>
+<li>
+<b>[OK]</b> — مرحله با موفقیت انجام شده است.
+</li>
+<li>
+<b>[FAIL]</b> — مرحله ناموفق بوده و جزئیات خطا (در صورت وجود) بلافاصله زیر آن چاپ می‌شود.
+</li>
+<li>
+<b>[..]</b> — مرحله در حال انجام است (وضعیت میانی، صرفاً برای اطلاع‌رسانی).
+</li>
+</ul>
+<p align="justify">
+<p>در پایان اجرا، یک خط جمع‌بندی نمایش داده می‌شود:</p>
+</p>
+<ul>
+<li>
+اگر همه‌ی بررسی‌ها موفق باشند: پیام موفقیت نمایش داده شده و اسکریپت با <code>exit code 0</code> خارج می‌شود.
+</li>
+<li>
+اگر حداقل یک بررسی ناموفق باشد: تعداد بررسی‌های ناموفق نمایش داده شده و اسکریپت با <code>exit code 1</code> خارج می‌شود.
+</li>
+</ul>
+<p align="justify">
+<p>Exit Code معنادار به‌طور خاص برای این در نظر گرفته شده که این اسکریپت بعداً در مراحل توسعه‌ی بعدی پروژه (مثلاً یک اسکریپت بزرگ‌تر نصب end-to-end) بتواند به‌عنوان یک پیش‌شرط (Precondition) فراخوانی شود؛ یعنی مراحل بعدی نصب تنها زمانی اجرا شوند که زیرساخت واقعاً سالم باشد.</p>
+</p>
+<hr>
+<p><b>نکات و ملاحظات طراحی</b></p>
+<br>
+<p align="justify">
+<ul>
+<li>
+<b>مقاوم در برابر خطای جزئی:</b> اسکریپت با اولین خطا متوقف نمی‌شود؛ بلکه تمام بررسی‌ها را تا انتها اجرا کرده و در پایان یک گزارش کامل ارائه می‌دهد. این باعث می‌شود در صورت بروز مشکل، به‌جای یک خطای مبهم، دقیقاً مشخص باشد کدام سرویس و کدام مرحله دچار مشکل شده است.
+</li>
+<br>
+<li>
+<b>مکانیزم Retry:</b> برای هر دو سرویس، اسکریپت چند بار (با فاصله‌ی زمانی) تلاش می‌کند پیش از اعلام شکست؛ چون معمول است که سرویس‌هایی مثل Kafka چند ثانیه پس از بالا آمدن کانتینر، زمان نیاز داشته باشند تا کاملاً آماده‌ی پاسخ‌گویی شوند.
+</li>
+<br>
+<li>
+<b>عدم وابستگی به کد پایتون پروژه:</b> این اسکریپت عمداً فقط از ابزارهای موجود در خودِ Image ها (psql، ابزارهای CLI کافکا) استفاده می‌کند و به هیچ کتابخانه یا کد اپلیکیشنی وابسته نیست؛ بنابراین می‌تواند مستقل و پیش از نوشتن هر خط کد پایتون اجرا و اعتبارسنجی شود.
+</li>
+<br>
+<li>
+<b>پاکسازی خودکار داده‌ی تستی:</b> هم جدول موقت در Postgres و هم Topic تستی در Kafka، در پایان اجرا حذف می‌شوند تا زیرساخت پس از تست دقیقاً در همان وضعیت اولیه (بدون داده‌ی اضافی) باقی بماند.
+</li>
+</ul>
+</p>
+</div>
+<hr>
+</article></main><footer>Project Technical Documentation</footer><script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script><script src="mermaid-config.js"></script></body></html>
