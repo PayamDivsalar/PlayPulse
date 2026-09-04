@@ -142,3 +142,18 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+
+# REST Framework Configuration
+# https://www.django-rest-framework.org/api-guide/settings/
+
+REST_FRAMEWORK = {
+    # Use custom exception handler for domain-specific exceptions
+    'EXCEPTION_HANDLER': 'apps_registry.exception_handlers.custom_exception_handler',
+    
+    # Permission policy: Allow any access (no authentication required)
+    # Authentication will be added in future phases if needed
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
+}
