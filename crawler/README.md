@@ -1,7 +1,36 @@
 # Crawler
 
 Play Store crawler subsystem: fetches active apps from App API, scrapes
-stats and reviews, and publishes them to Kafka.
+stats and reviews, and publishes them to Kafka on an hourly schedule.
+
+## Run locally
+
+From the project root (with host-side `.env`: `KAFKA_BOOTSTRAP_SERVERS=localhost:9092`):
+
+```bash
+python -m crawler.main
+```
+
+Manual end-to-end checklist: [docs/crawler_e2e_test.md](../docs/crawler_e2e_test.md).
+
+## Docker
+
+Infra + Kafka UI:
+
+```bash
+docker compose up -d postgres zookeeper kafka kafka-ui
+```
+
+Kafka UI: [http://localhost:8080](http://localhost:8080) — browse topics `app-stats` / `reviews`.
+
+Crawler container (optional for E2E; host `python -m crawler.main` is easier for logs):
+
+```bash
+docker compose up -d --build crawler
+```
+
+Inside compose, Kafka is `kafka:29092`. App API is reached via
+`host.docker.internal:8000` until Django is added as a compose service.
 
 ## Running tests
 
