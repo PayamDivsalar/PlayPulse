@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, NamedTuple
 
 from crawler.app_registry_client import AppRegistryClient
+from crawler.data_mapper import map_app_details, map_review
 from crawler.kafka_producer import CrawlerKafkaProducer
 from crawler.playstore_client import PlayStoreClient
 
@@ -51,7 +52,8 @@ class CrawlerService:
 
         try:
             app_details = self.playstore_client.get_app_details(package_name)
-            self.kafka_producer.send_app_stats(package_name, app_details)
+            mapped_stats = map_app_details(app_details, package_name)
+            self.kafka_producer.send_app_stats(package_name, mapped_stats)
             stats_ok = True
         except Exception:
             logger.error(
@@ -62,7 +64,8 @@ class CrawlerService:
 
         try:
             reviews = self.playstore_client.get_reviews(package_name, count=1000)
-            self.kafka_producer.send_reviews(package_name, reviews)
+            mapped_reviews = [map_review(review, package_name) for review in reviews]
+            self.kafka_producer.send_reviews(package_name, mapped_reviews)
             reviews_ok = True
         except Exception:
             logger.error(

@@ -16,7 +16,16 @@ class CrawlerServiceTests(unittest.TestCase):
         kafka_producer = Mock()
         app_registry_client = Mock()
         app_registry_client.get_active_applications.return_value = apps
-        playstore_client.get_reviews.return_value = [{"reviewId": "r1"}]
+        playstore_client.get_reviews.return_value = [
+            {
+                "reviewId": "r1",
+                "at": "2021-03-25T15:52:53",
+                "userName": "Alice",
+                "thumbsUpCount": 1,
+                "score": 5,
+                "content": "ok",
+            }
+        ]
 
         service = CrawlerService(
             playstore_client=playstore_client,
@@ -44,6 +53,12 @@ class CrawlerServiceTests(unittest.TestCase):
         for _args, kwargs in playstore.get_reviews.call_args_list:
             self.assertEqual(kwargs.get("count"), 1000)
 
+        for call in kafka.send_app_stats.call_args_list:
+            package_name, payload = call.args
+            self.assertEqual(payload["package_name"], package_name)
+            self.assertIn("crawled_at", payload)
+            self.assertIn("reviews_count", payload)
+
     def test_one_failing_app_does_not_stop_the_others(self) -> None:
         apps = [
             {"package_name": "com.a"},
@@ -70,25 +85,62 @@ class CrawlerServiceTests(unittest.TestCase):
     def test_reviews_failure_does_not_block_app_stats(self) -> None:
         apps = [{"package_name": "com.a"}]
         service, playstore, kafka, _ = self._build_service(apps)
-        playstore.get_app_details.return_value = {"score": 4.5}
+        playstore.get_app_details.return_value = {
+            "minInstalls": 100,
+            "score": 4.5,
+            "ratings": 10,
+            "reviews": 3,
+            "updated": 1_700_000_000,
+            "version": "1.0.0",
+            "adSupported": False,
+        }
         playstore.get_reviews.side_effect = RuntimeError("reviews failed")
 
         service.run_crawl_cycle()
 
-        kafka.send_app_stats.assert_called_once_with("com.a", {"score": 4.5})
+        kafka.send_app_stats.assert_called_once()
+        package_name, payload = kafka.send_app_stats.call_args.args
+        self.assertEqual(package_name, "com.a")
+        self.assertEqual(payload["package_name"], "com.a")
+        self.assertEqual(payload["score"], 4.5)
+        self.assertEqual(payload["min_installs"], 100)
+        self.assertEqual(payload["reviews_count"], 3)
+        self.assertIn("crawled_at", payload)
+        self.assertNotIn("minInstalls", payload)
         kafka.send_reviews.assert_not_called()
 
     def test_app_stats_failure_does_not_block_reviews(self) -> None:
         apps = [{"package_name": "com.a"}]
         service, playstore, kafka, _ = self._build_service(apps)
         playstore.get_app_details.side_effect = RuntimeError("details failed")
-        reviews = [{"reviewId": "r1"}]
-        playstore.get_reviews.return_value = reviews
+        playstore.get_reviews.return_value = [
+            {
+                "reviewId": "r1",
+                "at": "2021-03-25T15:52:53",
+                "userName": "Alice",
+                "thumbsUpCount": 1,
+                "score": 5,
+                "content": "ok",
+            }
+        ]
 
         service.run_crawl_cycle()
 
         kafka.send_app_stats.assert_not_called()
-        kafka.send_reviews.assert_called_once_with("com.a", reviews)
+        kafka.send_reviews.assert_called_once()
+        package_name, mapped_reviews = kafka.send_reviews.call_args.args
+        self.assertEqual(package_name, "com.a")
+        self.assertEqual(len(mapped_reviews), 1)
+        review = mapped_reviews[0]
+        self.assertEqual(review["package_name"], "com.a")
+        self.assertEqual(review["review_id"], "r1")
+        self.assertEqual(review["user_name"], "Alice")
+        self.assertEqual(review["thumbs_up_count"], 1)
+        self.assertEqual(review["score"], 5)
+        self.assertEqual(review["content"], "ok")
+        self.assertEqual(review["at"], "2021-03-25T15:52:53")
+        self.assertIn("crawled_at", review)
+        self.assertNotIn("reviewId", review)
 
     def test_empty_app_list_does_not_touch_kafka_or_raise(self) -> None:
         service, playstore, kafka, _ = self._build_service([])
