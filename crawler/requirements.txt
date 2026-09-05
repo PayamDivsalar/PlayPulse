@@ -1,1 +1,5 @@
 google-play-scraper==1.2.7
+kafka-python==2.2.15
+requests==2.32.3
+python-dotenv==1.0.1
+pytest==8.3.4
