@@ -52,6 +52,40 @@ services:
     networks:
       - project_network
 
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: project_kafka_ui
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    ports:
+      - "${KAFKA_UI_PORT:-8080}:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: playpulse
+      # Same docker network as the broker — use the internal listener.
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    networks:
+      - project_network
+
+  crawler:
+    build: ./crawler
+    container_name: project_crawler
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - kafka
+      - zookeeper
+    environment:
+      # In-compose Kafka listener (not localhost:9092 used by host-side clients).
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # TODO: replace once App API (Django) is added as a compose service.
+      # Until then, App API is assumed to run on the host at :8000.
+      APP_API_BASE_URL: http://host.docker.internal:8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - project_network
+
 networks:
   project_network:
     driver: bridge
