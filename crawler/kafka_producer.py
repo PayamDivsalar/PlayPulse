@@ -84,3 +84,9 @@ class CrawlerKafkaProducer:
         except KafkaError:
             logger.error("Failed to flush Kafka producer.", exc_info=True)
             raise
+
+    def close(self) -> None:
+        """Flush and close the underlying Kafka producer."""
+
+        self.flush()
+        self._producer.close()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import unittest
+from datetime import datetime
 from numbers import Number
 from unittest.mock import Mock, patch
 
@@ -174,6 +175,25 @@ class PlayStoreClientTests(unittest.TestCase):
         )
         reviews_mock.assert_called_once_with("com.example.app", count=2)
         rate_limiter.acquire.assert_called_once()
+
+    def test_get_reviews_normalizes_datetime_at_field(self) -> None:
+        rate_limiter = Mock(spec=RateLimiter)
+        client = PlayStoreClient(rate_limiter=rate_limiter)
+        raw_reviews = [
+            {
+                "reviewId": "r1",
+                "at": datetime(2021, 3, 25, 15, 52, 53),
+                "userName": "Alice",
+                "thumbsUpCount": 1,
+                "score": 5,
+                "content": "ok",
+            }
+        ]
+
+        with patch("google_play_scraper.reviews", return_value=(raw_reviews, None)):
+            result = client.get_reviews("com.example.app", count=1)
+
+        self.assertEqual(result[0]["at"], "2021-03-25T15:52:53")
 
 
 @pytest.mark.live

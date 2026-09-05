@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 import google_play_scraper
@@ -35,6 +36,15 @@ _REVIEW_FIELDS = (
     "score",
     "content",
 )
+
+
+def _normalize_review_value(field: str, value: Any) -> Any:
+    """Make review field values JSON-serializable for Kafka."""
+
+    if field == "at" and isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
 
 
 class PlayStoreClient:
@@ -87,4 +97,10 @@ class PlayStoreClient:
                 "Network error fetching reviews for %s", package_name, exc_info=True
             )
             raise
-        return [{field: review.get(field) for field in _REVIEW_FIELDS} for review in raw_reviews]
+        return [
+            {
+                field: _normalize_review_value(field, review.get(field))
+                for field in _REVIEW_FIELDS
+            }
+            for review in raw_reviews
+        ]

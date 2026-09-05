@@ -160,4 +160,4 @@ class CrawlerKafkaProducerLiveTests(unittest.TestCase):
             self.assertEqual(found, payload)
         finally:
             consumer.close()
-            producer._producer.close()
+            producer.close()
