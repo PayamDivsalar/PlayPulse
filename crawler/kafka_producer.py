@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
-from time import sleep
 from typing import Any, Callable
 
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 
 from crawler.config import Settings
-from crawler.retry_policy import with_retry
+from crawler.retry_policy import run_residual_retry, with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,7 @@ class CrawlerKafkaProducer:
 
     1. Producer-internal retries + ``acks='all'`` + idempotence (Settings).
     2. Application-level retries on Kafka errors after layer 1 fails
-       (full message for stats; residual failed reviews only for reviews).
+       (``with_retry`` for stats; ``run_residual_retry`` for reviews).
     3. Final failure is re-raised so ``CrawlerService`` can skip that path.
     """
 
@@ -100,56 +99,30 @@ class CrawlerKafkaProducer:
         enqueue the current pending set with ``send``, then ``get`` every future
         for *this* call (not ``flush``, which would wait on other workers).
 
-        Application retry is residual-set based: every future in an attempt is
-        awaited and classified; only reviews that failed confirmation are
+        Application retry uses ``run_residual_retry``: every future in an attempt
+        is awaited and classified; only reviews that failed confirmation are
         retried. The method still fails closed — if any review remains after the
         retry budget, the last ``KafkaError`` is raised so the crawl cycle can
         mark reviews unsuccessful. Downstream consumers should upsert by
         ``reviewId``.
         """
 
-        if not reviews:
-            return
-
-        pending = list(reviews)
-        max_retries = self._settings.kafka_send_retry_max_attempts
-        base_delay = self._settings.kafka_send_retry_base_delay_seconds
-        last_error: KafkaError | None = None
-
-        for attempt in range(max_retries + 1):
-            pending, error = self._publish_reviews_attempt(package_name, pending)
-            if error is not None:
-                last_error = error
-            if not pending:
-                return
-            if attempt >= max_retries:
-                break
-            delay = base_delay * (2**attempt)
-            logger.warning(
-                "Retryable Kafka error publishing reviews for package_name=%s "
-                "(%s pending). Attempt %s/%s failed: %s. Retrying in %.2fs.",
-                package_name,
-                len(pending),
-                attempt + 1,
-                max_retries + 1,
-                last_error,
-                delay,
+        try:
+            run_residual_retry(
+                lambda pending: self._publish_reviews_attempt(package_name, pending),
+                reviews,
+                max_retries=self._settings.kafka_send_retry_max_attempts,
+                base_delay_seconds=self._settings.kafka_send_retry_base_delay_seconds,
+                description=f"Kafka reviews package_name={package_name}",
             )
-            sleep(delay)
-
-        logger.error(
-            "All Kafka send retries exhausted (producer-internal and "
-            "application-level) for reviews package_name=%s "
-            "(%s review(s) still pending): %s",
-            package_name,
-            len(pending),
-            last_error,
-        )
-        if last_error is not None:
-            raise last_error
-        raise KafkaError(
-            f"Failed to publish {len(pending)} review(s) for {package_name}"
-        )
+        except KafkaError:
+            logger.error(
+                "All Kafka send retries exhausted (producer-internal and "
+                "application-level) for reviews package_name=%s",
+                package_name,
+                exc_info=True,
+            )
+            raise
 
     def _publish_reviews_attempt(
         self, package_name: str, reviews: list[dict[str, Any]]
