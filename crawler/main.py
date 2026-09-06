@@ -38,6 +38,7 @@ def main() -> int:
     playstore_client = PlayStoreClient(rate_limiter=rate_limiter, settings=settings)
     kafka_producer = CrawlerKafkaProducer(
         bootstrap_servers=settings.kafka_bootstrap_servers,
+        settings=settings,
     )
     app_registry_client = AppRegistryClient(
         base_url=settings.app_api_base_url,
