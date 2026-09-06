@@ -11,11 +11,15 @@ from crawler.crawler_service import CrawlerService
 
 logger = logging.getLogger(__name__)
 
-_CRAWL_JOB_ID = "hourly_crawl_cycle"
+_CRAWL_JOB_ID = "crawl_cycle"
 
 
-def build_scheduler(crawler_service: CrawlerService) -> BlockingScheduler:
-    """Create a BlockingScheduler that runs one crawl cycle every hour.
+def build_scheduler(
+    crawler_service: CrawlerService,
+    *,
+    interval_hours: int,
+) -> BlockingScheduler:
+    """Create a BlockingScheduler that runs crawl cycles on a fixed interval.
 
     BlockingScheduler is used (instead of BackgroundScheduler) because this
     process exists only to keep the crawler alive: start() blocks the main
@@ -35,7 +39,7 @@ def build_scheduler(crawler_service: CrawlerService) -> BlockingScheduler:
     scheduler.add_job(
         _run_cycle,
         trigger="interval",
-        hours=1,
+        hours=interval_hours,
         id=_CRAWL_JOB_ID,
         max_instances=1,
         coalesce=True,

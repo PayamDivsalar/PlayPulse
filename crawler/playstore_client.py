@@ -4,19 +4,17 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable
 
 import google_play_scraper
 from google_play_scraper.exceptions import NotFoundError
 
+from crawler.config import Settings
 from crawler.rate_limiter import RateLimiter
 from crawler.retry_policy import DEFAULT_RETRYABLE_EXCEPTIONS, with_retry
 
 logger = logging.getLogger(__name__)
 
-# NotFoundError means the package simply doesn't exist on the Play Store.
-# Retrying it would never succeed, so it must never be treated as a
-# transient/retryable error.
 _RETRYABLE_EXCEPTIONS = DEFAULT_RETRYABLE_EXCEPTIONS
 
 _APP_FIELDS = (
@@ -46,14 +44,20 @@ def _normalize_review_value(field: str, value: Any) -> Any:
     return value
 
 
-
 class PlayStoreClient:
     """Fetch Play Store app metadata and reviews, respecting a shared rate limit."""
 
-    def __init__(self, rate_limiter: RateLimiter) -> None:
+    def __init__(self, rate_limiter: RateLimiter, settings: Settings) -> None:
         self.rate_limiter = rate_limiter
+        self._default_reviews_count = settings.reviews_fetch_count
+        # Bind retry policy at construction time from injected settings
+        # (not at import time), so tests can vary attempts per instance.
+        self._retry: Callable = with_retry(
+            max_retries=settings.retry_max_attempts,
+            base_delay_seconds=settings.retry_base_delay_seconds,
+            exceptions=_RETRYABLE_EXCEPTIONS,
+        )
 
-    @with_retry(max_retries=3, base_delay_seconds=2, exceptions=_RETRYABLE_EXCEPTIONS)
     def get_app_details(self, package_name: str) -> dict[str, Any]:
         """Return a filtered subset of app details for a package.
 
@@ -63,6 +67,10 @@ class PlayStoreClient:
             requests.exceptions.RequestException: on network problems,
                 after retries are exhausted.
         """
+
+        return self._retry(self._get_app_details_once)(package_name)
+
+    def _get_app_details_once(self, package_name: str) -> dict[str, Any]:
         self.rate_limiter.acquire()
         try:
             raw = google_play_scraper.app(package_name)
@@ -76,8 +84,11 @@ class PlayStoreClient:
             raise
         return {field: raw.get(field) for field in _APP_FIELDS}
 
-    @with_retry(max_retries=3, base_delay_seconds=2, exceptions=_RETRYABLE_EXCEPTIONS)
-    def get_reviews(self, package_name: str, count: int = 1000) -> list[dict[str, Any]]:
+    def get_reviews(
+        self,
+        package_name: str,
+        count: int | None = None,
+    ) -> list[dict[str, Any]]:
         """Return the most recent reviews for a package as plain dicts.
 
         Raises:
@@ -86,6 +97,15 @@ class PlayStoreClient:
             requests.exceptions.RequestException: on network problems,
                 after retries are exhausted.
         """
+
+        fetch_count = self._default_reviews_count if count is None else count
+        return self._retry(self._get_reviews_once)(package_name, fetch_count)
+
+    def _get_reviews_once(
+        self,
+        package_name: str,
+        count: int,
+    ) -> list[dict[str, Any]]:
         self.rate_limiter.acquire()
         try:
             raw_reviews, _ = google_play_scraper.reviews(package_name, count=count)

@@ -12,7 +12,7 @@ import pytest
 from kafka import KafkaConsumer
 from kafka.errors import KafkaError
 
-from crawler import config
+from crawler.config import load_settings
 from crawler.kafka_producer import CrawlerKafkaProducer
 
 
@@ -89,14 +89,14 @@ class CrawlerKafkaProducerLiveTests(unittest.TestCase):
         with real crawled apps.
         """
 
-        bootstrap = config.get_kafka_bootstrap_servers()
+        bootstrap = load_settings().kafka_bootstrap_servers
         # Crawler/pytest run on the host; docker-internal DNS (kafka:29092) only
         # works inside the compose network. Fail fast with a clear hint.
         if "kafka:" in bootstrap.split(",")[0]:
             self.fail(
                 "KAFKA_BOOTSTRAP_SERVERS is set to a docker-internal address "
                 f"({bootstrap!r}). From the host use localhost:9092 "
-                "(see crawler/README.md and .env.example)."
+                "(see crawler/.env.example and docs/setup.md)."
             )
 
         package_name = f"live-test-app-{uuid.uuid4().hex[:12]}"

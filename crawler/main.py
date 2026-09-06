@@ -7,6 +7,7 @@ import signal
 import sys
 
 from crawler.app_registry_client import AppRegistryClient
+from crawler.config import load_settings
 from crawler.crawler_service import CrawlerService
 from crawler.kafka_producer import CrawlerKafkaProducer
 from crawler.playstore_client import PlayStoreClient
@@ -14,10 +15,6 @@ from crawler.rate_limiter import RateLimiter
 from crawler.scheduler import build_scheduler
 
 logger = logging.getLogger(__name__)
-
-# Conservative shared budget for Play Store HTTP calls across worker threads.
-_RATE_LIMIT_MAX_REQUESTS = 10
-_RATE_LIMIT_PER_SECONDS = 60.0
 
 
 def _configure_logging() -> None:
@@ -29,23 +26,34 @@ def _configure_logging() -> None:
 
 
 def main() -> int:
-    """Wire real dependencies, start the hourly scheduler, and block forever."""
+    """Load settings, wire dependencies, start the scheduler, and block forever."""
 
     _configure_logging()
+    settings = load_settings()
 
     rate_limiter = RateLimiter(
-        max_requests=_RATE_LIMIT_MAX_REQUESTS,
-        per_seconds=_RATE_LIMIT_PER_SECONDS,
+        max_requests=settings.rate_limit_max_requests,
+        per_seconds=settings.rate_limit_per_seconds,
     )
-    playstore_client = PlayStoreClient(rate_limiter=rate_limiter)
-    kafka_producer = CrawlerKafkaProducer()
-    app_registry_client = AppRegistryClient()
+    playstore_client = PlayStoreClient(rate_limiter=rate_limiter, settings=settings)
+    kafka_producer = CrawlerKafkaProducer(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+    )
+    app_registry_client = AppRegistryClient(
+        base_url=settings.app_api_base_url,
+        settings=settings,
+    )
     crawler_service = CrawlerService(
         playstore_client=playstore_client,
         kafka_producer=kafka_producer,
         app_registry_client=app_registry_client,
+        max_workers=settings.max_concurrent_workers,
+        reviews_fetch_count=settings.reviews_fetch_count,
     )
-    scheduler = build_scheduler(crawler_service)
+    scheduler = build_scheduler(
+        crawler_service,
+        interval_hours=settings.crawl_interval_hours,
+    )
 
     def _shutdown(signum: int, _frame: object) -> None:
         logger.info("Received signal %s; shutting down crawler", signum)
@@ -59,9 +67,11 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _shutdown)
 
     logger.info(
-        "Starting crawler scheduler (interval=1h, rate_limit=%s/%ss)",
-        _RATE_LIMIT_MAX_REQUESTS,
-        int(_RATE_LIMIT_PER_SECONDS),
+        "Starting crawler scheduler (interval=%sh, rate_limit=%s/%ss, workers=%s)",
+        settings.crawl_interval_hours,
+        settings.rate_limit_max_requests,
+        int(settings.rate_limit_per_seconds),
+        settings.max_concurrent_workers,
     )
     try:
         scheduler.start()

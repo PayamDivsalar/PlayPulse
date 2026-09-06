@@ -12,6 +12,7 @@ import pytest
 import requests
 from google_play_scraper.exceptions import NotFoundError
 
+from crawler.config import Settings
 from crawler.playstore_client import PlayStoreClient
 from crawler.rate_limiter import RateLimiter
 
@@ -35,9 +36,17 @@ _REVIEW_KEYS = (
 
 
 class PlayStoreClientTests(unittest.TestCase):
+    def _client(
+        self,
+        rate_limiter: Mock | None = None,
+        **settings_overrides: object,
+    ) -> tuple[PlayStoreClient, Mock, Settings]:
+        limiter = rate_limiter or Mock(spec=RateLimiter)
+        settings = Settings.for_testing(**settings_overrides)
+        return PlayStoreClient(rate_limiter=limiter, settings=settings), limiter, settings
+
     def test_get_app_details_returns_only_requested_fields(self) -> None:
-        rate_limiter = Mock(spec=RateLimiter)
-        client = PlayStoreClient(rate_limiter=rate_limiter)
+        client, rate_limiter, _ = self._client()
         raw_response = {
             "minInstalls": 123,
             "score": 4.5,
@@ -70,7 +79,7 @@ class PlayStoreClientTests(unittest.TestCase):
 
     def test_get_app_details_acquires_rate_limiter_before_library_call(self) -> None:
         rate_limiter = Mock(spec=RateLimiter)
-        client = PlayStoreClient(rate_limiter=rate_limiter)
+        client, _, _ = self._client(rate_limiter=rate_limiter)
 
         def app_side_effect(package_name: str) -> dict[str, object]:
             self.assertTrue(rate_limiter.acquire.called)
@@ -92,11 +101,8 @@ class PlayStoreClientTests(unittest.TestCase):
         self.assertEqual(result["version"], "1")
 
     def test_get_app_details_retries_network_error_then_reraises(self) -> None:
-        rate_limiter = Mock(spec=RateLimiter)
-        client = PlayStoreClient(rate_limiter=rate_limiter)
+        client, rate_limiter, settings = self._client(retry_max_attempts=3)
 
-        # Only network errors are retried; the call is attempted 1 + 3 times
-        # before the exception propagates.
         with patch(
             "google_play_scraper.app",
             side_effect=requests.ConnectionError("boom"),
@@ -105,18 +111,16 @@ class PlayStoreClientTests(unittest.TestCase):
                 with self.assertRaises(requests.ConnectionError):
                     client.get_app_details("com.example.app")
 
-        self.assertEqual(app_mock.call_count, 4)
-        self.assertEqual(rate_limiter.acquire.call_count, 4)
+        expected_attempts = settings.retry_max_attempts + 1
+        self.assertEqual(app_mock.call_count, expected_attempts)
+        self.assertEqual(rate_limiter.acquire.call_count, expected_attempts)
 
     def test_get_app_details_does_not_retry_non_network_error(self) -> None:
-        rate_limiter = Mock(spec=RateLimiter)
-        client = PlayStoreClient(rate_limiter=rate_limiter)
+        client, rate_limiter, _ = self._client()
 
         class PermanentError(Exception):
             pass
 
-        # A non-network error must propagate immediately without retrying,
-        # since retrying it would never succeed.
         with patch("google_play_scraper.app", side_effect=PermanentError("boom")) as app_mock:
             with patch("crawler.retry_policy.sleep", return_value=None):
                 with self.assertRaises(PermanentError):
@@ -126,8 +130,7 @@ class PlayStoreClientTests(unittest.TestCase):
         self.assertEqual(rate_limiter.acquire.call_count, 1)
 
     def test_get_reviews_returns_expected_structure(self) -> None:
-        rate_limiter = Mock(spec=RateLimiter)
-        client = PlayStoreClient(rate_limiter=rate_limiter)
+        client, rate_limiter, _ = self._client()
         raw_reviews = [
             {
                 "reviewId": "r1",
@@ -177,8 +180,7 @@ class PlayStoreClientTests(unittest.TestCase):
         rate_limiter.acquire.assert_called_once()
 
     def test_get_reviews_normalizes_datetime_at_field(self) -> None:
-        rate_limiter = Mock(spec=RateLimiter)
-        client = PlayStoreClient(rate_limiter=rate_limiter)
+        client, _, _ = self._client()
         raw_reviews = [
             {
                 "reviewId": "r1",
@@ -200,16 +202,26 @@ class PlayStoreClientTests(unittest.TestCase):
 class PlayStoreClientLiveTests(unittest.TestCase):
     """Live Play Store tests. Require internet; do not run in automated CI."""
 
+    def _live_client(self) -> PlayStoreClient:
+        settings = Settings.for_testing(
+            rate_limit_max_requests=5,
+            rate_limit_per_seconds=60,
+        )
+        return PlayStoreClient(
+            rate_limiter=RateLimiter(
+                max_requests=settings.rate_limit_max_requests,
+                per_seconds=settings.rate_limit_per_seconds,
+            ),
+            settings=settings,
+        )
+
     def test_live_get_app_details_real_connection(self) -> None:
         """Fetch real WhatsApp details and assert response shape/types only.
 
         Depends on a live Google Play Store connection. Do not run in CI.
         """
 
-        client = PlayStoreClient(
-            rate_limiter=RateLimiter(max_requests=5, per_seconds=60)
-        )
-        result = client.get_app_details("com.whatsapp")
+        result = self._live_client().get_app_details("com.whatsapp")
 
         for key in _APP_DETAIL_KEYS:
             self.assertIn(key, result)
@@ -244,15 +256,13 @@ class PlayStoreClientLiveTests(unittest.TestCase):
         Retries must not apply (NotFoundError is non-retryable).
         """
 
-        client = PlayStoreClient(
-            rate_limiter=RateLimiter(max_requests=5, per_seconds=60)
-        )
         start = time.monotonic()
         with self.assertRaises(NotFoundError):
-            client.get_app_details("this.package.definitely.does.not.exist.xyz123")
+            self._live_client().get_app_details(
+                "this.package.definitely.does.not.exist.xyz123"
+            )
         elapsed = time.monotonic() - start
 
-        # One network round-trip only; no exponential backoff (2s+4s+8s).
         self.assertLess(elapsed, 15.0)
 
     def test_live_get_reviews_real_connection(self) -> None:
@@ -261,10 +271,7 @@ class PlayStoreClientLiveTests(unittest.TestCase):
         Depends on a live Google Play Store connection. Do not run in CI.
         """
 
-        client = PlayStoreClient(
-            rate_limiter=RateLimiter(max_requests=5, per_seconds=60)
-        )
-        reviews = client.get_reviews("com.whatsapp", count=5)
+        reviews = self._live_client().get_reviews("com.whatsapp", count=5)
 
         self.assertIsInstance(reviews, list)
         self.assertGreater(len(reviews), 0)

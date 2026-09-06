@@ -1,6 +1,7 @@
 """Crawler package."""
 
 from crawler.app_registry_client import AppRegistryClient
+from crawler.config import Settings, load_settings
 from crawler.crawler_service import CrawlerService
 from crawler.exceptions import (
 	CrawlerConfigError,
@@ -21,5 +22,7 @@ __all__ = [
 	"PlayStoreClient",
 	"RateLimitExceededException",
 	"RateLimiter",
+	"Settings",
+	"load_settings",
 	"with_retry",
 ]

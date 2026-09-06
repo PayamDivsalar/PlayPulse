@@ -29,12 +29,15 @@ class CrawlerService:
         playstore_client: PlayStoreClient,
         kafka_producer: CrawlerKafkaProducer,
         app_registry_client: AppRegistryClient,
-        max_workers: int = 5,
+        *,
+        max_workers: int,
+        reviews_fetch_count: int,
     ) -> None:
         self.playstore_client = playstore_client
         self.kafka_producer = kafka_producer
         self.app_registry_client = app_registry_client
         self.max_workers = max_workers
+        self.reviews_fetch_count = reviews_fetch_count
 
     def _crawl_single_app(self, app: dict[str, Any]) -> AppCrawlResult:
         """Fetch and publish stats and reviews for one app in the same worker.
@@ -63,7 +66,10 @@ class CrawlerService:
             )
 
         try:
-            reviews = self.playstore_client.get_reviews(package_name, count=1000)
+            reviews = self.playstore_client.get_reviews(
+                package_name,
+                count=self.reviews_fetch_count,
+            )
             mapped_reviews = [map_review(review, package_name) for review in reviews]
             self.kafka_producer.send_reviews(package_name, mapped_reviews)
             reviews_ok = True

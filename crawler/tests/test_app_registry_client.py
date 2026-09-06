@@ -9,11 +9,16 @@ import pytest
 import requests
 
 from crawler.app_registry_client import AppRegistryClient
+from crawler.config import Settings, load_settings
 
 
 class AppRegistryClientTests(unittest.TestCase):
+    def _client(self, **settings_overrides: object) -> AppRegistryClient:
+        settings = Settings.for_testing(**settings_overrides)
+        return AppRegistryClient(base_url=settings.app_api_base_url, settings=settings)
+
     def test_get_active_applications_builds_correct_url_and_params(self) -> None:
-        client = AppRegistryClient(base_url="http://api.local")
+        client = self._client()
         response = Mock()
         response.json.return_value = []
         response.raise_for_status.return_value = None
@@ -24,11 +29,11 @@ class AppRegistryClientTests(unittest.TestCase):
         get_mock.assert_called_once_with(
             "http://api.local/api/applications/",
             params={"is_active": "true"},
-            timeout=10,
+            timeout=10.0,
         )
 
     def test_get_active_applications_parses_and_returns_list(self) -> None:
-        client = AppRegistryClient(base_url="http://api.local")
+        client = self._client()
         apps = [{"package_name": "com.a"}, {"package_name": "com.b"}]
         response = Mock()
         response.json.return_value = apps
@@ -40,7 +45,8 @@ class AppRegistryClientTests(unittest.TestCase):
         self.assertEqual(result, apps)
 
     def test_get_active_applications_retries_then_reraises_on_network_error(self) -> None:
-        client = AppRegistryClient(base_url="http://api.local")
+        settings = Settings.for_testing(retry_max_attempts=3)
+        client = AppRegistryClient(base_url=settings.app_api_base_url, settings=settings)
 
         with patch(
             "crawler.app_registry_client.requests.get",
@@ -50,8 +56,7 @@ class AppRegistryClientTests(unittest.TestCase):
                 with self.assertRaises(requests.ConnectionError):
                     client.get_active_applications()
 
-        # Default policy: 1 initial attempt + 3 retries.
-        self.assertEqual(get_mock.call_count, 4)
+        self.assertEqual(get_mock.call_count, settings.retry_max_attempts + 1)
 
 
 @pytest.mark.live
@@ -65,7 +70,11 @@ class AppRegistryClientLiveTests(unittest.TestCase):
         An empty list is a valid result when no apps are registered yet.
         """
 
-        client = AppRegistryClient()
+        settings = load_settings()
+        client = AppRegistryClient(
+            base_url=settings.app_api_base_url,
+            settings=settings,
+        )
         apps = client.get_active_applications()
 
         self.assertIsInstance(apps, list)

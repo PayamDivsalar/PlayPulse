@@ -9,8 +9,6 @@ from typing import Any
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 
-from crawler import config
-
 logger = logging.getLogger(__name__)
 
 _APP_STATS_TOPIC = "app-stats"
@@ -25,12 +23,13 @@ class CrawlerKafkaProducer:
     threads: ``KafkaProducer`` itself is thread-safe.
     """
 
-    def __init__(self, bootstrap_servers: str | None = None) -> None:
-        servers = bootstrap_servers or config.get_kafka_bootstrap_servers()
+    def __init__(self, bootstrap_servers: str) -> None:
         self._producer = KafkaProducer(
-            bootstrap_servers=servers.split(","),
+            bootstrap_servers=bootstrap_servers.split(","),
             key_serializer=lambda key: key.encode("utf-8"),
-            value_serializer=lambda value: json.dumps(value, ensure_ascii=False).encode("utf-8"),
+            value_serializer=lambda value: json.dumps(value, ensure_ascii=False).encode(
+                "utf-8"
+            ),
         )
 
     def send_app_stats(self, package_name: str, data: dict[str, Any]) -> None:
