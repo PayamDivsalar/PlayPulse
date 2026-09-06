@@ -18,6 +18,8 @@ from crawler.exceptions import CrawlerConfigError
 
 _CRAWLER_ENV_FILE = Path(__file__).resolve().parent / ".env"
 
+_VALID_ACKS = frozenset({"all", "0", "1", "-1"})
+
 
 @dataclass(frozen=True, slots=True)
 class Settings:
@@ -33,6 +35,14 @@ class Settings:
     reviews_fetch_count: int = 1000
     crawl_interval_hours: int = 1
     registry_request_timeout_seconds: float = 10.0
+    kafka_producer_retries: int = 5
+    kafka_producer_retry_backoff_ms: int = 500
+    kafka_producer_acks: str = "all"
+    kafka_producer_enable_idempotence: bool = True
+    kafka_producer_request_timeout_ms: int = 5000
+    kafka_producer_delivery_timeout_ms: int = 15000
+    kafka_send_retry_max_attempts: int = 3
+    kafka_send_retry_base_delay_seconds: float = 5.0
 
     def __post_init__(self) -> None:
         if not self.kafka_bootstrap_servers.strip():
@@ -55,6 +65,36 @@ class Settings:
             raise CrawlerConfigError("crawl_interval_hours must be > 0.")
         if self.registry_request_timeout_seconds <= 0:
             raise CrawlerConfigError("registry_request_timeout_seconds must be > 0.")
+        if self.kafka_producer_retries < 0:
+            raise CrawlerConfigError("kafka_producer_retries must be >= 0.")
+        if self.kafka_producer_retry_backoff_ms <= 0:
+            raise CrawlerConfigError("kafka_producer_retry_backoff_ms must be > 0.")
+        if str(self.kafka_producer_acks) not in _VALID_ACKS:
+            raise CrawlerConfigError(
+                "kafka_producer_acks must be one of: all, 0, 1, -1."
+            )
+        if self.kafka_producer_request_timeout_ms <= 0:
+            raise CrawlerConfigError(
+                "kafka_producer_request_timeout_ms must be > 0."
+            )
+        if self.kafka_producer_delivery_timeout_ms <= 0:
+            raise CrawlerConfigError(
+                "kafka_producer_delivery_timeout_ms must be > 0."
+            )
+        if (
+            self.kafka_producer_delivery_timeout_ms
+            <= self.kafka_producer_request_timeout_ms
+        ):
+            raise CrawlerConfigError(
+                "kafka_producer_delivery_timeout_ms must be > "
+                "kafka_producer_request_timeout_ms."
+            )
+        if self.kafka_send_retry_max_attempts < 0:
+            raise CrawlerConfigError("kafka_send_retry_max_attempts must be >= 0.")
+        if self.kafka_send_retry_base_delay_seconds < 0:
+            raise CrawlerConfigError(
+                "kafka_send_retry_base_delay_seconds must be >= 0."
+            )
 
     @classmethod
     def for_testing(cls, **overrides: object) -> Settings:
@@ -95,6 +135,20 @@ def _env_float(name: str, default: float) -> float:
         raise CrawlerConfigError(f"Environment variable {name} must be a float.") from exc
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise CrawlerConfigError(
+        f"Environment variable {name} must be a boolean (true/false)."
+    )
+
+
 def load_settings(env_file: Path | None = None) -> Settings:
     """Load ``.env`` (if present) and build a validated ``Settings`` instance."""
 
@@ -109,4 +163,24 @@ def load_settings(env_file: Path | None = None) -> Settings:
         max_concurrent_workers=_env_int("CRAWLER_MAX_WORKERS", 5),
         reviews_fetch_count=_env_int("CRAWLER_REVIEWS_FETCH_COUNT", 1000),
         crawl_interval_hours=_env_int("CRAWLER_INTERVAL_HOURS", 1),
+        kafka_producer_retries=_env_int("CRAWLER_KAFKA_PRODUCER_RETRIES", 5),
+        kafka_producer_retry_backoff_ms=_env_int(
+            "CRAWLER_KAFKA_PRODUCER_RETRY_BACKOFF_MS", 500
+        ),
+        kafka_producer_acks=os.getenv("CRAWLER_KAFKA_PRODUCER_ACKS", "all") or "all",
+        kafka_producer_enable_idempotence=_env_bool(
+            "CRAWLER_KAFKA_PRODUCER_ENABLE_IDEMPOTENCE", True
+        ),
+        kafka_producer_request_timeout_ms=_env_int(
+            "CRAWLER_KAFKA_PRODUCER_REQUEST_TIMEOUT_MS", 5000
+        ),
+        kafka_producer_delivery_timeout_ms=_env_int(
+            "CRAWLER_KAFKA_PRODUCER_DELIVERY_TIMEOUT_MS", 15000
+        ),
+        kafka_send_retry_max_attempts=_env_int(
+            "CRAWLER_KAFKA_SEND_RETRY_MAX_ATTEMPTS", 3
+        ),
+        kafka_send_retry_base_delay_seconds=_env_float(
+            "CRAWLER_KAFKA_SEND_RETRY_BASE_DELAY_SECONDS", 5.0
+        ),
     )
