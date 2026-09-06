@@ -96,6 +96,8 @@ class CrawlerKafkaProducerTests(unittest.TestCase):
     def test_send_reviews_sends_one_message_per_review(self) -> None:
         producer, underlying, _settings = self._build_producer()
         reviews = [{"reviewId": "r1"}, {"reviewId": "r2"}]
+        futures = [_ok_future(), _ok_future()]
+        underlying.send.side_effect = futures
 
         producer.send_reviews("com.example.app", reviews)
 
@@ -106,6 +108,57 @@ class CrawlerKafkaProducerTests(unittest.TestCase):
         underlying.send.assert_any_call(
             "reviews", key="com.example.app", value=reviews[1]
         )
+        for future in futures:
+            future.get.assert_called_once()
+
+    def test_send_reviews_enqueues_all_before_awaiting_delivery(self) -> None:
+        """All send() calls must finish before any future.get() (batch confirm)."""
+
+        producer, underlying, _settings = self._build_producer()
+        reviews = [{"reviewId": "r1"}, {"reviewId": "r2"}, {"reviewId": "r3"}]
+        order: list[str] = []
+
+        def send_side_effect(*_args: object, **_kwargs: object) -> MagicMock:
+            order.append("send")
+            future = MagicMock()
+
+            def get_side_effect(*_get_args: object, **_get_kwargs: object) -> None:
+                order.append("get")
+
+            future.get.side_effect = get_side_effect
+            return future
+
+        underlying.send.side_effect = send_side_effect
+
+        producer.send_reviews("com.example.app", reviews)
+
+        self.assertEqual(order, ["send", "send", "send", "get", "get", "get"])
+
+    def test_send_reviews_retries_entire_batch_when_one_delivery_fails(self) -> None:
+        """A single failed future retries the whole reviews batch, not one item."""
+
+        producer, underlying, _settings = self._build_producer(
+            kafka_send_retry_max_attempts=1,
+            kafka_send_retry_base_delay_seconds=0,
+        )
+        reviews = [{"reviewId": "r1"}, {"reviewId": "r2"}, {"reviewId": "r3"}]
+
+        # Attempt 1: enqueue 3, fail on confirming the 2nd future.
+        # Attempt 2: enqueue 3 again, all confirms succeed.
+        attempt1 = [_ok_future(), MagicMock(), _ok_future()]
+        attempt1[1].get.side_effect = KafkaTimeoutError("partition offline")
+        attempt2 = [_ok_future(), _ok_future(), _ok_future()]
+        underlying.send.side_effect = attempt1 + attempt2
+
+        producer.send_reviews("com.example.app", reviews)
+
+        self.assertEqual(underlying.send.call_count, 6)
+        # First attempt stops confirming after the failing future (index 1).
+        attempt1[0].get.assert_called_once()
+        attempt1[1].get.assert_called_once()
+        attempt1[2].get.assert_not_called()
+        for future in attempt2:
+            future.get.assert_called_once()
 
     def test_send_app_stats_retries_then_succeeds(self) -> None:
         producer, underlying, _settings = self._build_producer(

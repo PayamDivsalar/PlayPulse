@@ -81,7 +81,7 @@ class CrawlerKafkaProducer:
 
     def _send_app_stats_once(self, package_name: str, data: dict[str, Any]) -> None:
         future = self._producer.send(_APP_STATS_TOPIC, key=package_name, value=data)
-        future.get(timeout=self._get_timeout_seconds)
+        self._await_deliveries([future])
 
     def send_reviews(self, package_name: str, reviews: list[dict[str, Any]]) -> None:
         """Send each review to the reviews topic as an individual message.
@@ -98,6 +98,11 @@ class CrawlerKafkaProducer:
         do not create duplicate records; application-level retries remain safe
         for the common case where the prior attempt truly failed to land.
         Downstream consumers should still upsert by ``reviewId``.
+
+        Delivery is confirmed in two phases so the shared producer can batch:
+        enqueue every review with ``send``, then ``get`` only on this call's
+        futures (not ``flush``, which would wait on other workers' messages).
+        Application retry still re-runs the whole batch, not a single review.
         """
 
         try:
@@ -114,10 +119,18 @@ class CrawlerKafkaProducer:
     def _send_reviews_once(
         self, package_name: str, reviews: list[dict[str, Any]]
     ) -> None:
-        for review in reviews:
-            future = self._producer.send(
-                _REVIEWS_TOPIC, key=package_name, value=review
-            )
+        # Phase 1: enqueue all messages so KafkaProducer can batch them.
+        futures = [
+            self._producer.send(_REVIEWS_TOPIC, key=package_name, value=review)
+            for review in reviews
+        ]
+        # Phase 2: confirm only *this* batch's futures (worker-local attribution).
+        self._await_deliveries(futures)
+
+    def _await_deliveries(self, futures: list[Any]) -> None:
+        """Block until each future succeeds or raises a ``KafkaError``."""
+
+        for future in futures:
             future.get(timeout=self._get_timeout_seconds)
 
     def flush(self) -> None:
