@@ -134,8 +134,26 @@ class CrawlerKafkaProducerTests(unittest.TestCase):
 
         self.assertEqual(order, ["send", "send", "send", "get", "get", "get"])
 
-    def test_send_reviews_retries_entire_batch_when_one_delivery_fails(self) -> None:
-        """A single failed future retries the whole reviews batch, not one item."""
+    def test_send_reviews_awaits_all_futures_even_when_one_fails(self) -> None:
+        """A failed confirm must not skip awaiting the rest of the attempt."""
+
+        producer, underlying, _settings = self._build_producer(
+            kafka_send_retry_max_attempts=0,
+            kafka_send_retry_base_delay_seconds=0,
+        )
+        reviews = [{"reviewId": "r1"}, {"reviewId": "r2"}, {"reviewId": "r3"}]
+        futures = [_ok_future(), MagicMock(), _ok_future()]
+        futures[1].get.side_effect = KafkaTimeoutError("partition offline")
+        underlying.send.side_effect = futures
+
+        with self.assertRaises(KafkaTimeoutError):
+            producer.send_reviews("com.example.app", reviews)
+
+        for future in futures:
+            future.get.assert_called_once()
+
+    def test_send_reviews_retries_only_failed_reviews(self) -> None:
+        """Only reviews whose delivery failed are resent on the next attempt."""
 
         producer, underlying, _settings = self._build_producer(
             kafka_send_retry_max_attempts=1,
@@ -143,22 +161,49 @@ class CrawlerKafkaProducerTests(unittest.TestCase):
         )
         reviews = [{"reviewId": "r1"}, {"reviewId": "r2"}, {"reviewId": "r3"}]
 
-        # Attempt 1: enqueue 3, fail on confirming the 2nd future.
-        # Attempt 2: enqueue 3 again, all confirms succeed.
-        attempt1 = [_ok_future(), MagicMock(), _ok_future()]
-        attempt1[1].get.side_effect = KafkaTimeoutError("partition offline")
-        attempt2 = [_ok_future(), _ok_future(), _ok_future()]
+        # Attempt 1: r2 and r3 fail confirmation (r1 succeeds).
+        # Attempt 2: only r2 and r3 are enqueued and succeed.
+        attempt1 = [_ok_future(), MagicMock(), MagicMock()]
+        attempt1[1].get.side_effect = KafkaTimeoutError("timeout-r2")
+        attempt1[2].get.side_effect = KafkaTimeoutError("timeout-r3")
+        attempt2 = [_ok_future(), _ok_future()]
         underlying.send.side_effect = attempt1 + attempt2
 
         producer.send_reviews("com.example.app", reviews)
 
-        self.assertEqual(underlying.send.call_count, 6)
-        # First attempt stops confirming after the failing future (index 1).
-        attempt1[0].get.assert_called_once()
-        attempt1[1].get.assert_called_once()
-        attempt1[2].get.assert_not_called()
-        for future in attempt2:
+        self.assertEqual(underlying.send.call_count, 5)
+        sent_values = [call.kwargs["value"] for call in underlying.send.call_args_list]
+        self.assertEqual(
+            sent_values,
+            [reviews[0], reviews[1], reviews[2], reviews[1], reviews[2]],
+        )
+        for future in attempt1 + attempt2:
             future.get.assert_called_once()
+
+    def test_send_reviews_reraises_after_residual_retries_exhausted(self) -> None:
+        """If residuals remain after the retry budget, raise the KafkaError."""
+
+        producer, underlying, _settings = self._build_producer(
+            kafka_send_retry_max_attempts=1,
+            kafka_send_retry_base_delay_seconds=0,
+        )
+        reviews = [{"reviewId": "r1"}, {"reviewId": "r2"}]
+        always_fail = MagicMock()
+        always_fail.get.side_effect = KafkaTimeoutError("still down")
+        # Attempt1: r1 ok, r2 fail → Attempt2: only r2, still fail.
+        underlying.send.side_effect = [
+            _ok_future(),
+            always_fail,
+            always_fail,
+        ]
+
+        with self.assertRaises(KafkaTimeoutError) as ctx:
+            producer.send_reviews("com.example.app", reviews)
+
+        self.assertIn("still down", str(ctx.exception))
+        self.assertEqual(underlying.send.call_count, 3)
+        sent_values = [call.kwargs["value"] for call in underlying.send.call_args_list]
+        self.assertEqual(sent_values, [reviews[0], reviews[1], reviews[1]])
 
     def test_send_app_stats_retries_then_succeeds(self) -> None:
         producer, underlying, _settings = self._build_producer(

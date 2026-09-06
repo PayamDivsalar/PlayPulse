@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from time import sleep
 from typing import Any, Callable
 
 from kafka import KafkaProducer
@@ -29,7 +30,8 @@ class CrawlerKafkaProducer:
     Durability is layered:
 
     1. Producer-internal retries + ``acks='all'`` + idempotence (Settings).
-    2. Application-level ``with_retry`` on Kafka errors after layer 1 fails.
+    2. Application-level retries on Kafka errors after layer 1 fails
+       (full message for stats; residual failed reviews only for reviews).
     3. Final failure is re-raised so ``CrawlerService`` can skip that path.
     """
 
@@ -94,38 +96,95 @@ class CrawlerKafkaProducer:
 
         Unlike ``PlayStoreClient`` (which retries HTTP / ``RequestException``),
         this retries on ``KafkaError`` after the producer-internal retry budget
-        is exhausted. With ``enable_idempotence=True``, library-internal retries
-        do not create duplicate records; application-level retries remain safe
-        for the common case where the prior attempt truly failed to land.
-        Downstream consumers should still upsert by ``reviewId``.
+        is exhausted. Delivery uses two phases so the shared producer can batch:
+        enqueue the current pending set with ``send``, then ``get`` every future
+        for *this* call (not ``flush``, which would wait on other workers).
 
-        Delivery is confirmed in two phases so the shared producer can batch:
-        enqueue every review with ``send``, then ``get`` only on this call's
-        futures (not ``flush``, which would wait on other workers' messages).
-        Application retry still re-runs the whole batch, not a single review.
+        Application retry is residual-set based: every future in an attempt is
+        awaited and classified; only reviews that failed confirmation are
+        retried. The method still fails closed — if any review remains after the
+        retry budget, the last ``KafkaError`` is raised so the crawl cycle can
+        mark reviews unsuccessful. Downstream consumers should upsert by
+        ``reviewId``.
         """
 
-        try:
-            self._retry(self._send_reviews_once)(package_name, reviews)
-        except KafkaError:
-            logger.error(
-                "All Kafka send retries exhausted (producer-internal and "
-                "application-level) for reviews package_name=%s",
-                package_name,
-                exc_info=True,
-            )
-            raise
+        if not reviews:
+            return
 
-    def _send_reviews_once(
+        pending = list(reviews)
+        max_retries = self._settings.kafka_send_retry_max_attempts
+        base_delay = self._settings.kafka_send_retry_base_delay_seconds
+        last_error: KafkaError | None = None
+
+        for attempt in range(max_retries + 1):
+            pending, error = self._publish_reviews_attempt(package_name, pending)
+            if error is not None:
+                last_error = error
+            if not pending:
+                return
+            if attempt >= max_retries:
+                break
+            delay = base_delay * (2**attempt)
+            logger.warning(
+                "Retryable Kafka error publishing reviews for package_name=%s "
+                "(%s pending). Attempt %s/%s failed: %s. Retrying in %.2fs.",
+                package_name,
+                len(pending),
+                attempt + 1,
+                max_retries + 1,
+                last_error,
+                delay,
+            )
+            sleep(delay)
+
+        logger.error(
+            "All Kafka send retries exhausted (producer-internal and "
+            "application-level) for reviews package_name=%s "
+            "(%s review(s) still pending): %s",
+            package_name,
+            len(pending),
+            last_error,
+        )
+        if last_error is not None:
+            raise last_error
+        raise KafkaError(
+            f"Failed to publish {len(pending)} review(s) for {package_name}"
+        )
+
+    def _publish_reviews_attempt(
         self, package_name: str, reviews: list[dict[str, Any]]
-    ) -> None:
-        # Phase 1: enqueue all messages so KafkaProducer can batch them.
-        futures = [
-            self._producer.send(_REVIEWS_TOPIC, key=package_name, value=review)
-            for review in reviews
-        ]
-        # Phase 2: confirm only *this* batch's futures (worker-local attribution).
-        self._await_deliveries(futures)
+    ) -> tuple[list[dict[str, Any]], KafkaError | None]:
+        """Enqueue ``reviews``, await all futures, return residual failures.
+
+        Every successfully enqueued future is awaited even if earlier confirms
+        fail, so already-acked reviews are not unnecessarily retried.
+        """
+
+        enqueued: list[tuple[dict[str, Any], Any]] = []
+        failed: list[dict[str, Any]] = []
+        last_error: KafkaError | None = None
+
+        # Phase 1: enqueue all pending messages so KafkaProducer can batch them.
+        for review in reviews:
+            try:
+                future = self._producer.send(
+                    _REVIEWS_TOPIC, key=package_name, value=review
+                )
+            except KafkaError as exc:
+                failed.append(review)
+                last_error = exc
+            else:
+                enqueued.append((review, future))
+
+        # Phase 2: classify every future from this attempt (worker-local only).
+        for review, future in enqueued:
+            try:
+                future.get(timeout=self._get_timeout_seconds)
+            except KafkaError as exc:
+                failed.append(review)
+                last_error = exc
+
+        return failed, last_error
 
     def _await_deliveries(self, futures: list[Any]) -> None:
         """Block until each future succeeds or raises a ``KafkaError``."""
