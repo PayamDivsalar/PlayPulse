@@ -5,7 +5,8 @@
 
 ## پیش‌نیاز
 
-- فایل `.env` در ریشه پروژه (برای اجرای host-side از `KAFKA_BOOTSTRAP_SERVERS=localhost:9092` و `APP_API_BASE_URL=http://localhost:8000` استفاده کنید)
+- `.env` ریشه فقط برای `docker compose` (نام/رمز Postgres و پورت‌ها) — جزئیات در [`docs/setup.md`](setup.md)
+- `crawler/.env` برای اجرای host/venv کراولر (`KAFKA_BOOTSTRAP_SERVERS=localhost:9092`، `APP_API_BASE_URL=http://127.0.0.1:8000`)
 - venv مربوط به `crawler` و `app_api`
 - اینترنت برای دسترسی به Google Play
 
@@ -60,7 +61,7 @@ curl -s 'http://localhost:8000/api/applications/?is_active=true'
 
 ## ۳. اجرای crawler روی host (برای مشاهده‌ی لاگ)
 
-از ریشه پروژه، با `.env` میزبان (`localhost:9092`):
+از ریشه پروژه، با `crawler/.env` میزبان (`localhost:9092`):
 
 ```bash
 cd /path/to/PlayPulse

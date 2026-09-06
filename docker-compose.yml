@@ -76,7 +76,8 @@ services:
       - kafka
       - zookeeper
     environment:
-      # In-compose Kafka listener (not localhost:9092 used by host-side clients).
+      # Docker-network addresses — intentionally NOT from crawler/.env
+      # (that file is for host/venv: localhost:9092). See docs/setup.md.
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       # TODO: replace once App API (Django) is added as a compose service.
       # Until then, App API is assumed to run on the host at :8000.
