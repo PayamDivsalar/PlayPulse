@@ -19,10 +19,14 @@ class AppRegistryClient:
     def __init__(self, base_url: str, settings: Settings) -> None:
         self.base_url = base_url.rstrip("/")
         self._timeout_seconds = settings.registry_request_timeout_seconds
-        self._retry: Callable = with_retry(
+        retry = with_retry(
             max_retries=settings.retry_max_attempts,
             base_delay_seconds=settings.retry_base_delay_seconds,
             exceptions=(requests.RequestException,),
+        )
+        # Bind once at construction so each fetch does not rebuild a wrapper.
+        self._get_active_applications_with_retry: Callable[[], list[dict[str, Any]]] = (
+            retry(self._get_active_applications_once)
         )
 
     def get_active_applications(self) -> list[dict[str, Any]]:
@@ -39,24 +43,26 @@ class AppRegistryClient:
         """
 
         url = f"{self.base_url}/api/applications/"
-        params = {"is_active": "true"}
-
-        def _fetch() -> list[dict[str, Any]]:
-            response = requests.get(
-                url,
-                params=params,
-                timeout=self._timeout_seconds,
-            )
-            response.raise_for_status()
-            payload = response.json()
-            if not isinstance(payload, list):
-                raise ValueError(
-                    f"Expected a JSON list of applications, got {type(payload).__name__}."
-                )
-            return payload
-
         try:
-            return self._retry(_fetch)()
+            return self._get_active_applications_with_retry()
         except Exception:
-            logger.error("Failed to fetch active applications from %s", url, exc_info=True)
+            logger.error(
+                "Failed to fetch active applications from %s", url, exc_info=True
+            )
             raise
+
+    def _get_active_applications_once(self) -> list[dict[str, Any]]:
+        url = f"{self.base_url}/api/applications/"
+        params = {"is_active": "true"}
+        response = requests.get(
+            url,
+            params=params,
+            timeout=self._timeout_seconds,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise ValueError(
+                f"Expected a JSON list of applications, got {type(payload).__name__}."
+            )
+        return payload

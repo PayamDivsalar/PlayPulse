@@ -50,12 +50,19 @@ class PlayStoreClient:
     def __init__(self, rate_limiter: RateLimiter, settings: Settings) -> None:
         self.rate_limiter = rate_limiter
         self._default_reviews_count = settings.reviews_fetch_count
-        # Bind retry policy at construction time from injected settings
-        # (not at import time), so tests can vary attempts per instance.
-        self._retry: Callable = with_retry(
+        # Bind retry wrappers at construction time from injected settings
+        # (not at import time / per call), so tests can vary attempts per
+        # instance without rebuilding decorators on every request.
+        retry = with_retry(
             max_retries=settings.retry_max_attempts,
             base_delay_seconds=settings.retry_base_delay_seconds,
             exceptions=_RETRYABLE_EXCEPTIONS,
+        )
+        self._get_app_details_with_retry: Callable[..., dict[str, Any]] = retry(
+            self._get_app_details_once
+        )
+        self._get_reviews_with_retry: Callable[..., list[dict[str, Any]]] = retry(
+            self._get_reviews_once
         )
 
     def get_app_details(self, package_name: str) -> dict[str, Any]:
@@ -68,7 +75,7 @@ class PlayStoreClient:
                 after retries are exhausted.
         """
 
-        return self._retry(self._get_app_details_once)(package_name)
+        return self._get_app_details_with_retry(package_name)
 
     def _get_app_details_once(self, package_name: str) -> dict[str, Any]:
         self.rate_limiter.acquire()
@@ -99,7 +106,7 @@ class PlayStoreClient:
         """
 
         fetch_count = self._default_reviews_count if count is None else count
-        return self._retry(self._get_reviews_once)(package_name, fetch_count)
+        return self._get_reviews_with_retry(package_name, fetch_count)
 
     def _get_reviews_once(
         self,

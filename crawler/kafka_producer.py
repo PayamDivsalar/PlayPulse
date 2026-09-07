@@ -37,10 +37,14 @@ class CrawlerKafkaProducer:
     def __init__(self, bootstrap_servers: str, settings: Settings) -> None:
         self._settings = settings
         self._get_timeout_seconds = settings.kafka_producer_request_timeout_ms / 1000.0
-        self._retry: Callable = with_retry(
+        retry = with_retry(
             max_retries=settings.kafka_send_retry_max_attempts,
             base_delay_seconds=settings.kafka_send_retry_base_delay_seconds,
             exceptions=_RETRYABLE_EXCEPTIONS,
+        )
+        # Bind once at construction so each send does not rebuild a wrapper.
+        self._send_app_stats_with_retry: Callable[..., None] = retry(
+            self._send_app_stats_once
         )
         self._producer = KafkaProducer(
             bootstrap_servers=bootstrap_servers.split(","),
@@ -70,7 +74,7 @@ class CrawlerKafkaProducer:
         """
 
         try:
-            self._retry(self._send_app_stats_once)(package_name, data)
+            self._send_app_stats_with_retry(package_name, data)
         except KafkaError:
             logger.error(
                 "All Kafka send retries exhausted (producer-internal and "
