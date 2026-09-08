@@ -98,6 +98,8 @@ class SuccessTests(CliTestCase):
 
         self.assertIn("Handshake RTT", output)
         self.assertIn("Retransmissions", output)
+        self.assertIn("Out-of-order", output)
+        self.assertIn("Spurious retran.", output)
         self.assertIn("Zero-window events", output)
         self.assertIn("TCP resets", output)
         self.assertIn("Total bytes", output)

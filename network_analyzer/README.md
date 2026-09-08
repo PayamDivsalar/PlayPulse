@@ -57,6 +57,8 @@ envelope.
   "scenario": "UPLOAD",
   "rtt_handshake": 43.12,
   "retransmission_count": 7,
+  "out_of_order_count": 1,
+  "spurious_retransmission_count": 0,
   "zero_window_count": 0,
   "tcp_reset_count": 2,
   "bytes_transferred_total": 18234123,
@@ -73,7 +75,9 @@ envelope.
 | `package_name` | string | Resolved to `application_id` by the consumer. |
 | `scenario` | string | `UPLOAD` or `DOWNLOAD`. |
 | `rtt_handshake` | float \| null | Milliseconds. `null` when the capture holds no complete handshake. |
-| `retransmission_count` | int | TCP only. |
+| `retransmission_count` | int | TCP only. True retransmissions; excludes spurious. |
+| `out_of_order_count` | int | TCP only. Segments that arrived ahead of the contiguous frontier. |
+| `spurious_retransmission_count` | int | TCP only. Resends of data the peer had already ACKed. |
 | `zero_window_count` | int | TCP only. |
 | `tcp_reset_count` | int | TCP only. |
 | `bytes_transferred_total` | int | All IP traffic. |
@@ -126,13 +130,24 @@ finally got through. Wireshark's `tcp.analysis.ack_rtt` behaves the same way,
 which the oracle test verifies.
 
 **Retransmission count** (`retransmission_count`) — *heuristic.* Per flow
-direction, the analyzer tracks the highest `seq + payload_length` observed. A
-segment carrying payload whose `seq + payload_length` does not exceed that
-high-water mark counts as a retransmission; an exactly duplicated SYN or FIN
-counts too. This does not distinguish true retransmissions from out-of-order
-delivery or spurious retransmissions the way Wireshark's expert analysis does,
-which is why the test suite includes an optional oracle test comparing the
-analyzer's output against `tshark`.
+direction the analyzer keeps a merged map of covered sequence ranges. A
+payload-bearing segment whose bytes are already fully covered, and that the
+peer has not yet acknowledged, counts as a retransmission. An exact duplicate
+SYN or FIN counts too. Spurious resends (already ACKed) are excluded here and
+reported separately.
+
+**Out-of-order count** (`out_of_order_count`) — *heuristic.* A payload segment
+that introduces only new bytes but starts ahead of the contiguous frontier
+(leaving a sequence hole) increments this counter instead of
+`retransmission_count`.
+
+**Spurious retransmission count** (`spurious_retransmission_count`) —
+*heuristic.* A fully covered payload segment whose end the peer has already
+acknowledged. These are excluded from `retransmission_count` so loss-recovery
+signal is not inflated by unnecessary resends.
+
+The optional tshark oracle test still cross-checks unambiguous retransmission
+cases against `tcp.analysis.retransmission`.
 
 **Zero-window count** (`zero_window_count`) — exact. TCP packets advertising
 `window == 0`, excluding SYN and RST packets. A SYN's window is an initial
@@ -340,27 +355,55 @@ it holds, then pretty-prints them with their Kafka keys. Options: `--max-message
 ### Running in Docker
 
 The compose service sits behind the `tools` profile, so `docker compose up`
-never starts it — this is an on-demand batch job, not a daemon:
+never starts it — this is an on-demand job, not a daemon. The image uses a
+small entrypoint dispatcher (same idea as official Postgres/MySQL images): the
+default command is batch ingestion; any other arguments go to the single-file
+analyzer.
+
+`./data/pcap` on the host is bind-mounted to `/data/pcap` in the container.
+Drop captures into `data/pcap/inbox/` on the host, then:
 
 ```bash
 docker compose --profile tools build network-analyzer
 
+# Default: batch-analyze everything in /data/pcap/inbox (→ processed/ or failed/).
+docker compose run --rm network-analyzer
+
+# Batch with the same flags the host script accepts.
+docker compose run --rm network-analyzer --batch --dry-run --skip-registry-check --keep
+
+# One capture (paths are inside the container).
 docker compose run --rm network-analyzer \
   --file /data/pcap/inbox/com.whatsapp__upload__20260907T141500.pcap
+
+docker compose run --rm network-analyzer \
+  --file /data/pcap/inbox/com.whatsapp__upload__20260907T141500.pcap \
+  --dry-run --skip-registry-check
+
+# Container / single-file help.
+docker compose run --rm network-analyzer --help
 ```
 
-`./data/pcap` is bind-mounted to `/data/pcap` in the container, since captures
-are copied off a phone by hand and need to be reachable from the host.
+| How you run it | What runs inside the container |
+| --- | --- |
+| `docker compose run --rm network-analyzer` | `analyze_pcaps.sh` over `/data/pcap/inbox` |
+| `… --batch [options]` | Same, with extra batch flags |
+| `… --file /data/pcap/inbox/… [options]` | `python -m network_analyzer.main …` |
+| Host: `python -m network_analyzer.main --file data/pcap/inbox/…` | Same analyzer, no container |
+| Host: `./scripts/analyze_pcaps.sh` | Same batch script, no container |
+
+Host and container share one code path; Docker only changes where Kafka/App API
+hostnames come from (`docker-compose.yml` vs `network_analyzer/.env`).
 
 **Known limitation.** From inside the container the App API is reached at
 `http://host.docker.internal:8000`, but `app_api/config/settings.py` currently
 sets `ALLOWED_HOSTS = []`, so Django answers that hostname with HTTP 400 and the
 registry check fails. Until the App API becomes a compose service, either add
 `host.docker.internal` to `ALLOWED_HOSTS`, or run the container with
-`--skip-registry-check` and rely on the host-side run for validation. The same
-constraint applies to the crawler container. The analyzer reports this case as a
-configuration error rather than a retryable one, so a batch run fails loudly
-instead of looping.
+`--skip-registry-check` (batch: `--batch --skip-registry-check`) and rely on the
+host-side run for validation. The same constraint applies to the crawler
+container. The analyzer reports this case as a configuration error rather than a
+retryable one, so a batch run fails loudly instead of looping.
 
 ## Testing
 

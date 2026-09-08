@@ -198,6 +198,8 @@ class TsharkOracleTests(unittest.TestCase):
 
         self.assertEqual(metrics.retransmission_count, expected)
         self.assertEqual(metrics.retransmission_count, 2)
+        self.assertEqual(metrics.out_of_order_count, 0)
+        self.assertEqual(metrics.spurious_retransmission_count, 0)
 
     def test_clean_capture_has_no_anomalies_in_either_tool(self) -> None:
         capture = Capture.of(

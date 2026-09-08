@@ -12,6 +12,8 @@ def _metrics(**overrides: object) -> NetworkMetrics:
     values: dict[str, object] = {
         "rtt_handshake_ms": 12.5,
         "retransmission_count": 0,
+        "out_of_order_count": 0,
+        "spurious_retransmission_count": 0,
         "zero_window_count": 0,
         "tcp_reset_count": 0,
         "bytes_transferred_total": 1000,
@@ -58,6 +60,14 @@ class MetricsValidationTests(unittest.TestCase):
     def test_rejects_negative_counter(self) -> None:
         with self.assertRaises(NetworkAnalyzerError):
             _metrics(retransmission_count=-1)
+
+    def test_rejects_negative_out_of_order_count(self) -> None:
+        with self.assertRaises(NetworkAnalyzerError):
+            _metrics(out_of_order_count=-1)
+
+    def test_rejects_negative_spurious_count(self) -> None:
+        with self.assertRaises(NetworkAnalyzerError):
+            _metrics(spurious_retransmission_count=-1)
 
     def test_rejects_negative_rtt(self) -> None:
         with self.assertRaises(NetworkAnalyzerError):

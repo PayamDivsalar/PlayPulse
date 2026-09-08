@@ -24,6 +24,8 @@ _MESSAGE = {
     "scenario": "UPLOAD",
     "rtt_handshake": 43.123,
     "retransmission_count": 7,
+    "out_of_order_count": 1,
+    "spurious_retransmission_count": 2,
     "zero_window_count": 0,
     "tcp_reset_count": 2,
     "bytes_transferred_total": 1040,

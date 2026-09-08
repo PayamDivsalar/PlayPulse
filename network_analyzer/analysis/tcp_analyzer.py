@@ -1,8 +1,9 @@
 """Network quality and stability metrics (specification group 1).
 
-A streaming accumulator over TCP segments. Three of the four metrics are exact
-reads of protocol fields; retransmission detection is a documented heuristic,
-described on :meth:`TcpAnalyzer._observe_retransmission`.
+A streaming accumulator over TCP segments. Zero-window and RST counts are
+exact field reads. Retransmission detection uses covered sequence intervals
+so out-of-order delivery is not mistaken for loss recovery, and peer ACK
+tracking separates spurious resends from true retransmissions.
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ logger = logging.getLogger(__name__)
 _SEQ_SPACE = 2**32
 
 _DirectionKey = tuple[str, int, str, int]
+# Half-open byte ranges in relative sequence space: [start, end).
+_Interval = tuple[int, int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +30,8 @@ class TcpMetrics:
     rtt_handshake_ms: float | None
     handshake_sample_count: int
     retransmission_count: int
+    out_of_order_count: int
+    spurious_retransmission_count: int
     zero_window_count: int
     tcp_reset_count: int
 
@@ -42,9 +47,13 @@ class TcpAnalyzer:
         self._pending_syns: dict[tuple[_DirectionKey, int], float] = {}
         self._rtt_samples_seconds: list[float] = []
         self._base_seq: dict[_DirectionKey, int] = {}
-        self._highest_seq_end: dict[_DirectionKey, int] = {}
+        self._covered: dict[_DirectionKey, list[_Interval]] = {}
+        self._next_expected: dict[_DirectionKey, int] = {}
+        self._peer_ack_abs: dict[_DirectionKey, int] = {}
         self._seen_control: set[tuple[_DirectionKey, int, str]] = set()
         self._retransmission_count = 0
+        self._out_of_order_count = 0
+        self._spurious_retransmission_count = 0
         self._zero_window_count = 0
         self._tcp_reset_count = 0
 
@@ -60,6 +69,7 @@ class TcpAnalyzer:
 
         self._observe_zero_window(segment)
         self._observe_handshake(segment, packet.timestamp)
+        self._note_peer_ack(segment)
         self._observe_retransmission(segment)
 
     def result(self) -> TcpMetrics:
@@ -72,6 +82,8 @@ class TcpAnalyzer:
             rtt_handshake_ms=mean_ms,
             handshake_sample_count=len(samples),
             retransmission_count=self._retransmission_count,
+            out_of_order_count=self._out_of_order_count,
+            spurious_retransmission_count=self._spurious_retransmission_count,
             zero_window_count=self._zero_window_count,
             tcp_reset_count=self._tcp_reset_count,
         )
@@ -132,27 +144,56 @@ class TcpAnalyzer:
             return
         self._rtt_samples_seconds.append(elapsed)
 
-    def _observe_retransmission(self, segment: TcpSegment) -> None:
-        """Detect retransmitted segments.
+    def _note_peer_ack(self, segment: TcpSegment) -> None:
+        """Record how far the peer has acknowledged this direction's data.
 
-        Heuristic, and the only metric here that is not a direct field read.
-        Per flow direction the analyzer tracks the highest ``seq + length``
-        seen. A segment carrying payload whose end does not advance that
-        high-water mark is counted as a retransmission, and an exactly
-        duplicated SYN or FIN is counted too, since both consume a sequence
-        number without carrying payload.
+        An ACK on one direction confirms bytes previously sent on the reverse
+        direction. Absolute ACK numbers are stored and converted to relative
+        sequence space only when that direction has an established base.
+        """
+
+        if not segment.ack_flag:
+            return
+
+        data_key = segment.reply_key
+        previous = self._peer_ack_abs.get(data_key)
+        if previous is None:
+            self._peer_ack_abs[data_key] = segment.ack
+            return
+
+        # Prefer the numerically greater ACK in absolute space when both fall
+        # on the same side of the wrap; otherwise keep the one that advanced
+        # relative to the data stream's base once known.
+        base = self._base_seq.get(data_key)
+        if base is None:
+            if segment.ack > previous:
+                self._peer_ack_abs[data_key] = segment.ack
+            return
+
+        prev_rel = (previous - base) % _SEQ_SPACE
+        new_rel = (segment.ack - base) % _SEQ_SPACE
+        if new_rel > prev_rel:
+            self._peer_ack_abs[data_key] = segment.ack
+
+    def _observe_retransmission(self, segment: TcpSegment) -> None:
+        """Classify data and control segments against covered sequence ranges.
+
+        For payload-bearing segments the analyzer keeps a merged interval map
+        per direction:
+
+        * entirely new bytes ahead of the contiguous frontier → out-of-order
+        * any overlap with already-covered bytes, without a peer ACK past the
+          segment end → retransmission (partial overlaps count once)
+        * fully covered bytes the peer has already acknowledged → spurious
+          retransmission (excluded from ``retransmission_count``)
+        * fully covered bytes not yet acknowledged → retransmission
+
+        Exact duplicate SYN or FIN segments also count as retransmissions:
+        both consume a sequence number without carrying payload.
 
         Sequence numbers are compared relative to the first value seen in that
-        direction, using modular arithmetic. TCP's initial sequence number is
-        random, so an ordinary transfer can cross the 32-bit boundary mid
-        capture; comparing raw values would then read the wrap as a massive
-        backwards jump and count every subsequent segment as a retransmission.
-
-        Known limitation: this does not distinguish a true retransmission from
-        out-of-order delivery or from a spurious retransmission the way
-        Wireshark's expert analysis does, and a partially overlapping segment
-        that still advances the high-water mark is not flagged. The oracle test
-        in ``tests/test_tshark_oracle.py`` quantifies the difference.
+        direction, using modular arithmetic, so a wrap of the 32-bit counter
+        does not look like a backwards jump.
         """
 
         key = segment.direction_key
@@ -172,16 +213,102 @@ class TcpAnalyzer:
     def _observe_data_segment(
         self, key: _DirectionKey, relative_seq: int, payload_bytes: int
     ) -> None:
-        segment_end = relative_seq + payload_bytes
-        highest = self._highest_seq_end.get(key)
+        start = relative_seq
+        end = relative_seq + payload_bytes
+        covered = self._covered.setdefault(key, [])
 
-        if highest is None or segment_end > highest:
-            self._highest_seq_end[key] = segment_end
+        if _fully_covered(covered, start, end):
+            if self._peer_has_acked_through(key, end):
+                self._spurious_retransmission_count += 1
+            else:
+                self._retransmission_count += 1
             return
-        self._retransmission_count += 1
+
+        if key not in self._next_expected:
+            self._next_expected[key] = start
+
+        overlaps = _overlaps(covered, start, end)
+        if overlaps:
+            self._retransmission_count += 1
+        elif start > self._next_expected[key]:
+            self._out_of_order_count += 1
+
+        _merge_interval(covered, start, end)
+        self._advance_next_expected(key)
+
+    def _peer_has_acked_through(self, key: _DirectionKey, relative_end: int) -> bool:
+        abs_ack = self._peer_ack_abs.get(key)
+        base = self._base_seq.get(key)
+        if abs_ack is None or base is None:
+            return False
+        return (abs_ack - base) % _SEQ_SPACE >= relative_end
+
+    def _advance_next_expected(self, key: _DirectionKey) -> None:
+        next_expected = self._next_expected[key]
+        for start, end in self._covered[key]:
+            if start > next_expected:
+                break
+            if end > next_expected:
+                next_expected = end
+        self._next_expected[key] = next_expected
 
     def _relative_seq(self, key: _DirectionKey, seq: int) -> int:
         """Sequence number relative to the first one seen in this direction."""
 
         base = self._base_seq.setdefault(key, seq)
         return (seq - base) % _SEQ_SPACE
+
+
+def _fully_covered(intervals: list[_Interval], start: int, end: int) -> bool:
+    """Return True when every byte in ``[start, end)`` is already covered."""
+
+    if start >= end:
+        return True
+    cursor = start
+    for interval_start, interval_end in intervals:
+        if interval_end <= cursor:
+            continue
+        if interval_start > cursor:
+            return False
+        cursor = interval_end
+        if cursor >= end:
+            return True
+    return cursor >= end
+
+
+def _overlaps(intervals: list[_Interval], start: int, end: int) -> bool:
+    """Return True when ``[start, end)`` shares any byte with ``intervals``."""
+
+    for interval_start, interval_end in intervals:
+        if interval_end <= start:
+            continue
+        if interval_start >= end:
+            return False
+        return True
+    return False
+
+
+def _merge_interval(intervals: list[_Interval], start: int, end: int) -> None:
+    """Insert ``[start, end)`` into a sorted, disjoint interval list in place."""
+
+    if start >= end:
+        return
+
+    merged: list[_Interval] = []
+    placed = False
+    for interval_start, interval_end in intervals:
+        if interval_end < start:
+            merged.append((interval_start, interval_end))
+            continue
+        if interval_start > end:
+            if not placed:
+                merged.append((start, end))
+                placed = True
+            merged.append((interval_start, interval_end))
+            continue
+        start = min(start, interval_start)
+        end = max(end, interval_end)
+
+    if not placed:
+        merged.append((start, end))
+    intervals[:] = merged

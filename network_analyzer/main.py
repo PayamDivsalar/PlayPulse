@@ -166,6 +166,8 @@ def _format_report(result: AnalysisResult, *, published: bool) -> str:
         "Network quality and stability (TCP only)",
         f"  Handshake RTT       {rtt_line}",
         f"  Retransmissions     {metrics.retransmission_count:,}",
+        f"  Out-of-order        {metrics.out_of_order_count:,}",
+        f"  Spurious retran.    {metrics.spurious_retransmission_count:,}",
         f"  Zero-window events  {metrics.zero_window_count:,}",
         f"  TCP resets          {metrics.tcp_reset_count:,}",
         "",

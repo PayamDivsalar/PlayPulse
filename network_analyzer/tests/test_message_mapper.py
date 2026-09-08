@@ -20,6 +20,8 @@ _EXPECTED_KEYS = {
     "scenario",
     "rtt_handshake",
     "retransmission_count",
+    "out_of_order_count",
+    "spurious_retransmission_count",
     "zero_window_count",
     "tcp_reset_count",
     "bytes_transferred_total",
@@ -35,6 +37,8 @@ def _result(**overrides: object) -> AnalysisResult:
     metrics = metrics_overrides or NetworkMetrics(
         rtt_handshake_ms=43.123456,
         retransmission_count=7,
+        out_of_order_count=1,
+        spurious_retransmission_count=2,
         zero_window_count=0,
         tcp_reset_count=2,
         bytes_transferred_total=1040,
@@ -97,6 +101,8 @@ class ValueMappingTests(unittest.TestCase):
         message = map_analysis_result(_result())
 
         self.assertEqual(message["retransmission_count"], 7)
+        self.assertEqual(message["out_of_order_count"], 1)
+        self.assertEqual(message["spurious_retransmission_count"], 2)
         self.assertEqual(message["zero_window_count"], 0)
         self.assertEqual(message["tcp_reset_count"], 2)
         self.assertEqual(message["bytes_transferred_total"], 1040)
@@ -111,6 +117,8 @@ class ValueMappingTests(unittest.TestCase):
         metrics = NetworkMetrics(
             rtt_handshake_ms=None,
             retransmission_count=0,
+            out_of_order_count=0,
+            spurious_retransmission_count=0,
             zero_window_count=0,
             tcp_reset_count=0,
             bytes_transferred_total=100,
@@ -131,6 +139,8 @@ class ValueMappingTests(unittest.TestCase):
         metrics = NetworkMetrics(
             rtt_handshake_ms=None,
             retransmission_count=0,
+            out_of_order_count=0,
+            spurious_retransmission_count=0,
             zero_window_count=0,
             tcp_reset_count=0,
             bytes_transferred_total=0,

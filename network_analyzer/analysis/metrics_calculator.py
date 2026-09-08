@@ -47,6 +47,8 @@ def _combine(volume: VolumeTotals, tcp: TcpMetrics) -> NetworkMetrics:
     return NetworkMetrics(
         rtt_handshake_ms=tcp.rtt_handshake_ms,
         retransmission_count=tcp.retransmission_count,
+        out_of_order_count=tcp.out_of_order_count,
+        spurious_retransmission_count=tcp.spurious_retransmission_count,
         zero_window_count=tcp.zero_window_count,
         tcp_reset_count=tcp.tcp_reset_count,
         bytes_transferred_total=volume.bytes_transferred_total,

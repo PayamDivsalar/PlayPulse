@@ -102,17 +102,23 @@ class NetworkMetrics:
     """The metrics required by the subsystem specification, for one pcap file.
 
     Groups 1 and 2 of the specification differ in scope, which matters when
-    reading the numbers: the four TCP counters describe TCP traffic only, while
-    the two byte totals cover every IP packet in the capture (including UDP and
+    reading the numbers: the TCP counters describe TCP traffic only, while the
+    two byte totals cover every IP packet in the capture (including UDP and
     QUIC).
 
     ``handshake_sample_count`` is not part of the persisted schema. It exists so
     the CLI can report how many handshakes the mean was taken over, which is the
     difference between a trustworthy average and a single outlier.
+
+    ``retransmission_count`` excludes spurious resends; those are counted in
+    ``spurious_retransmission_count`` instead. Out-of-order delivery is tracked
+    separately so it is not mistaken for loss recovery.
     """
 
     rtt_handshake_ms: float | None
     retransmission_count: int
+    out_of_order_count: int
+    spurious_retransmission_count: int
     zero_window_count: int
     tcp_reset_count: int
     bytes_transferred_total: int
@@ -125,6 +131,8 @@ class NetworkMetrics:
             raise NetworkAnalyzerError("rtt_handshake_ms must be >= 0.")
         for name in (
             "retransmission_count",
+            "out_of_order_count",
+            "spurious_retransmission_count",
             "zero_window_count",
             "tcp_reset_count",
             "bytes_transferred_total",

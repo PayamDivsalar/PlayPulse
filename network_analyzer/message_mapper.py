@@ -40,6 +40,8 @@ def map_analysis_result(result: AnalysisResult) -> dict[str, Any]:
         "scenario": result.scenario.value,
         "rtt_handshake": _round_optional(metrics.rtt_handshake_ms, _RTT_DECIMALS),
         "retransmission_count": metrics.retransmission_count,
+        "out_of_order_count": metrics.out_of_order_count,
+        "spurious_retransmission_count": metrics.spurious_retransmission_count,
         "zero_window_count": metrics.zero_window_count,
         "tcp_reset_count": metrics.tcp_reset_count,
         "bytes_transferred_total": metrics.bytes_transferred_total,

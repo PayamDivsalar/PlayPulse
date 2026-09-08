@@ -268,6 +268,74 @@ class RetransmissionTests(TcpAnalyzerTestCase):
         metrics = self.analyze(capture)
 
         self.assertEqual(metrics.retransmission_count, 1)
+        self.assertEqual(metrics.out_of_order_count, 0)
+        self.assertEqual(metrics.spurious_retransmission_count, 0)
+
+    def test_out_of_order_fill_is_not_a_retransmission(self) -> None:
+        """A late segment that only fills a hole must not look like loss recovery."""
+
+        capture = Capture.of(
+            (1.0, tcp_packet(seq=1000, payload=b"a" * 100)),
+            (1.1, tcp_packet(seq=1200, payload=b"c" * 100)),
+            (1.2, tcp_packet(seq=1100, payload=b"b" * 100)),
+        )
+
+        metrics = self.analyze(capture)
+
+        self.assertEqual(metrics.retransmission_count, 0)
+        self.assertEqual(metrics.out_of_order_count, 1)
+        self.assertEqual(metrics.spurious_retransmission_count, 0)
+
+    def test_spurious_retransmission_is_excluded_from_real_count(self) -> None:
+        """Resending bytes the peer already ACKed is tracked separately."""
+
+        capture = Capture.of(
+            (1.0, tcp_packet(seq=1000, payload=b"a" * 100)),
+            (
+                1.1,
+                tcp_packet(
+                    src=SERVER_IP,
+                    dst=CLIENT_IP,
+                    sport=SERVER_PORT,
+                    dport=CLIENT_PORT,
+                    seq=5000,
+                    ack=1100,
+                    flags="A",
+                ),
+            ),
+            (1.2, tcp_packet(seq=1000, payload=b"a" * 100)),
+        )
+
+        metrics = self.analyze(capture)
+
+        self.assertEqual(metrics.retransmission_count, 0)
+        self.assertEqual(metrics.spurious_retransmission_count, 1)
+        self.assertEqual(metrics.out_of_order_count, 0)
+
+    def test_unacked_duplicate_remains_a_real_retransmission(self) -> None:
+        """Without a covering peer ACK, a full overlap is loss recovery."""
+
+        capture = Capture.of(
+            (1.0, tcp_packet(seq=1000, payload=b"a" * 100)),
+            (1.1, tcp_packet(seq=1000, payload=b"a" * 100)),
+        )
+
+        metrics = self.analyze(capture)
+
+        self.assertEqual(metrics.retransmission_count, 1)
+        self.assertEqual(metrics.spurious_retransmission_count, 0)
+
+    def test_partial_overlap_counts_as_one_retransmission(self) -> None:
+        capture = Capture.of(
+            (1.0, tcp_packet(seq=1000, payload=b"a" * 100)),
+            (1.1, tcp_packet(seq=1050, payload=b"b" * 100)),
+        )
+
+        metrics = self.analyze(capture)
+
+        self.assertEqual(metrics.retransmission_count, 1)
+        self.assertEqual(metrics.out_of_order_count, 0)
+        self.assertEqual(metrics.spurious_retransmission_count, 0)
 
 
 class ZeroWindowTests(TcpAnalyzerTestCase):
@@ -361,6 +429,8 @@ class ScopeTests(TcpAnalyzerTestCase):
 
         self.assertIsNone(metrics.rtt_handshake_ms)
         self.assertEqual(metrics.retransmission_count, 0)
+        self.assertEqual(metrics.out_of_order_count, 0)
+        self.assertEqual(metrics.spurious_retransmission_count, 0)
         self.assertEqual(metrics.zero_window_count, 0)
         self.assertEqual(metrics.tcp_reset_count, 0)
 
@@ -369,6 +439,8 @@ class ScopeTests(TcpAnalyzerTestCase):
 
         self.assertIsNone(metrics.rtt_handshake_ms)
         self.assertEqual(metrics.retransmission_count, 0)
+        self.assertEqual(metrics.out_of_order_count, 0)
+        self.assertEqual(metrics.spurious_retransmission_count, 0)
         self.assertEqual(metrics.zero_window_count, 0)
         self.assertEqual(metrics.tcp_reset_count, 0)
 
@@ -421,6 +493,8 @@ class CombinedScenarioTests(TcpAnalyzerTestCase):
         self.assertAlmostEqual(metrics.rtt_handshake_ms, 30.0, places=2)
         self.assertEqual(metrics.handshake_sample_count, 1)
         self.assertEqual(metrics.retransmission_count, 2)
+        self.assertEqual(metrics.out_of_order_count, 0)
+        self.assertEqual(metrics.spurious_retransmission_count, 0)
         self.assertEqual(metrics.zero_window_count, 2)
         self.assertEqual(metrics.tcp_reset_count, 1)
 
