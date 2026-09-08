@@ -1,0 +1,19 @@
+# Applied when building network-analyzer with context: . (see docker-compose.yml).
+.git/
+.cursor/
+.venv/
+.venv-analyzer/
+venv/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.env
+data/
+docs/
+app_api/
+crawler/
+htmlcov/
+*.md
+!network_analyzer/README.md
