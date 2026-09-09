@@ -1,0 +1,8 @@
+dpkt==1.9.8
+kafka-python==2.2.15
+requests==2.32.3
+python-dotenv==1.0.1
+pytest==8.3.4
+# Test-only: builds synthetic pcap fixtures with known ground truth so the
+# analysis core can be verified without committing binary captures.
+scapy==2.6.1

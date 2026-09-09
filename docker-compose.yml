@@ -87,6 +87,43 @@ services:
     networks:
       - project_network
 
+  network-analyzer:
+    # Context is the repo root so the image can include both the package and
+    # scripts/analyze_pcaps.sh. The entrypoint dispatches --batch (default) vs
+    # single-file `python -m network_analyzer.main` arguments.
+    build:
+      context: .
+      dockerfile: network_analyzer/Dockerfile
+    container_name: project_network_analyzer
+    # Behind a profile so `docker compose up` never starts it: this subsystem is
+    # an on-demand batch job over manually recorded captures, not a daemon.
+    #
+    #   docker compose run --rm network-analyzer
+    #   docker compose run --rm network-analyzer --batch --dry-run --keep
+    #   docker compose run --rm network-analyzer \
+    #     --file /data/pcap/inbox/com.whatsapp__upload__20260907T141500.pcap
+    profiles:
+      - tools
+    depends_on:
+      - kafka
+    environment:
+      # Docker-network addresses — intentionally NOT from network_analyzer/.env
+      # (that file is for host/venv: localhost:9092). See docs/setup.md.
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # TODO: replace once App API (Django) is added as a compose service.
+      # Until then, App API is assumed to run on the host at :8000.
+      APP_API_BASE_URL: http://host.docker.internal:8000
+      ANALYZER_PCAP_ROOT: /data/pcap
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Captures are recorded on a phone and copied in by hand, so the inbox is
+      # a bind mount rather than a named volume: the operator needs to drop
+      # files into it from the host.
+      - ./data/pcap:/data/pcap
+    networks:
+      - project_network
+
 networks:
   project_network:
     driver: bridge

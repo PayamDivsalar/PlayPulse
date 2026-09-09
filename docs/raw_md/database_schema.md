@@ -501,6 +501,8 @@ erDiagram
         string scenario "UPLOAD or DOWNLOAD"
         float rtt_handshake
         int retransmission_count
+        int out_of_order_count
+        int spurious_retransmission_count
         int zero_window_count
         int tcp_reset_count
         bigint bytes_transferred_total
@@ -560,7 +562,21 @@ erDiagram
 <td><code>retransmission_count</code></td>
 <td>Integer</td>
 <td>Default: 0</td>
-<td>تعداد بسته‌های بازفرستاده‌شده به دلیل عدم دریافت تأیید در شبکه.</td>
+<td>تعداد بازفرستادن واقعی داده (بدون شمارش spurious). بازفرستادن‌هایی که peer قبلاً ACK کرده در <code>spurious_retransmission_count</code> جدا می‌شوند.</td>
+</tr>
+
+<tr>
+<td><code>out_of_order_count</code></td>
+<td>Integer</td>
+<td>Default: 0</td>
+<td>تعداد سگمنت‌های داده‌ای که جلوتر از frontier پیوسته رسیده و حفره sequence ایجاد کرده‌اند (نه retransmission).</td>
+</tr>
+
+<tr>
+<td><code>spurious_retransmission_count</code></td>
+<td>Integer</td>
+<td>Default: 0</td>
+<td>تعداد بازفرستادن داده وقتی peer قبلاً آن بازه را ACK کرده است. از <code>retransmission_count</code> جدا است.</td>
 </tr>
 
 <tr>

@@ -216,3 +216,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Network analyzer capture files.
+# PCAPdroid recordings are large and contain a real user's network traffic, so
+# they are never committed. The directory structure is kept via .gitkeep files
+# so a fresh clone has somewhere to drop captures.
+data/pcap/**
+# Re-include the directories themselves, otherwise git never descends into them
+# and the .gitkeep exception below can never match.
+!data/pcap/**/
+!data/pcap/**/.gitkeep
+
+# Local analyzer virtualenv created by scripts/analyze_pcaps.sh auto-detection.
+.venv-analyzer/
