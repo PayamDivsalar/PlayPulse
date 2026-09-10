@@ -44,3 +44,27 @@ class RateLimiterTests(unittest.TestCase):
         completion_times.sort()
         self.assertEqual(len(completion_times), 4)
         self.assertGreaterEqual(completion_times[2] - completion_times[0], 0.20)
+
+    def test_contention_does_not_starve_after_burst(self) -> None:
+        """Workers must keep making progress after the initial bucket is empty.
+
+        A prior bug zeroed fractional tokens on every wait, which under
+        ThreadPoolExecutor contention reset the bucket forever after the burst.
+        """
+
+        limiter = RateLimiter(max_requests=2, per_seconds=1.0)
+        acquired = 0
+
+        def worker(_: int) -> None:
+            nonlocal acquired
+            limiter.acquire()
+            acquired += 1
+
+        with patch("crawler.rate_limiter.uniform", return_value=0.0):
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                # 2 burst + 6 that must refill → should finish in a few seconds
+                futures = [executor.submit(worker, i) for i in range(8)]
+                for future in futures:
+                    future.result(timeout=10)
+
+        self.assertEqual(acquired, 8)
