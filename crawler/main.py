@@ -50,6 +50,8 @@ def main() -> int:
         app_registry_client=app_registry_client,
         max_workers=settings.max_concurrent_workers,
         reviews_fetch_count=settings.reviews_fetch_count,
+        cycle_reports_enabled=settings.cycle_reports_enabled,
+        cycle_reports_dir=settings.cycle_reports_dir,
     )
     scheduler = build_scheduler(
         crawler_service,
@@ -68,11 +70,13 @@ def main() -> int:
     signal.signal(signal.SIGTERM, _shutdown)
 
     logger.info(
-        "Starting crawler scheduler (interval=%sh, rate_limit=%s/%ss, workers=%s)",
+        "Starting crawler scheduler (interval=%sh, rate_limit=%s/%ss, workers=%s, "
+        "cycle_reports=%s)",
         settings.crawl_interval_hours,
         settings.rate_limit_max_requests,
         int(settings.rate_limit_per_seconds),
         settings.max_concurrent_workers,
+        "on" if settings.cycle_reports_enabled else "off",
     )
     try:
         scheduler.start()
