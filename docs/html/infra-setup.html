@@ -3,7 +3,7 @@
 <p><b>مستندات تست زیرساخت پروژه</b></p>
 <br>
 <p align="justify">
-<p>پیش از شروع پیاده‌سازی هر بخش از منطق برنامه (Django، Crawler و …)، لازم بود از سلامت و آماده‌به‌کار بودن زیرساخت پایه‌ی پروژه (PostgreSQL و Kafka) اطمینان حاصل شود. برای این منظور، به‌جای بررسی دستی و پراکنده، یک اسکریپت Smoke Test خودکار در مسیر <code>scripts/check_infra.sh</code> نوشته شده است که این بررسی را به‌صورت یکپارچه و تکرارپذیر انجام می‌دهد.</p>
+<p>پیش از شروع پیاده‌سازی هر بخش از منطق برنامه (Django، Crawler و …)، لازم بود از سلامت و آماده‌به‌کار بودن زیرساخت پایه‌ی پروژه (PostgreSQL و Kafka) اطمینان حاصل شود. برای این منظور، به‌جای بررسی دستی و پراکنده، یک اسکریپت Smoke Test خودکار در مسیر <code>scripts/infra/check_infra.sh</code> نوشته شده است که این بررسی را به‌صورت یکپارچه و تکرارپذیر انجام می‌دهد.</p>
 </p>
 <p><b>پیش‌نیازها</b></p>
 <br>
@@ -28,8 +28,8 @@
 <p><b>نحوه‌ی اجرای اسکریپت</b></p>
 <p><br></p>
 </div>
-<div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">chmod</span> +x scripts/check_infra.sh</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./scripts/check_infra.sh</span></span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">chmod</span> +x scripts/infra/check_infra.sh</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./scripts/infra/check_infra.sh</span></span></code></pre></div>
 <div dir=rtl>
 
 <hr>

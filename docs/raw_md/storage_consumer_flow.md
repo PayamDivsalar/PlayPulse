@@ -897,7 +897,7 @@ flowchart TD
 </tr>
 <tr>
 <td>تأیید سلامت استقرار</td>
-<td>اسکریپت <code>scripts/verify_storage_consumer.sh</code></td>
+<td>اسکریپت <code>scripts/verify/verify_storage_consumer.sh</code></td>
 <td>کل مسیر را به‌ترتیب بررسی می‌کند: نسخه‌ی اسکیما، تعداد Partition تاپیک‌ها، پیام‌های تولیدشده، ردیف‌های نوشته‌شده، پیام‌های مرده، و Lag هر Group — پس شکست، مرحله‌ی خراب را نشان می‌دهد نه کل Pipeline را</td>
 </tr>
 <tr>

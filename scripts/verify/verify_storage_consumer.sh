@@ -15,8 +15,8 @@
 # proves the analyzer published; this one proves the rows landed.
 #
 # Usage:
-#   ./scripts/verify_storage_consumer.sh [options]
-#   ./scripts/verify_storage_consumer.sh --help
+#   ./scripts/verify/verify_storage_consumer.sh [options]
+#   ./scripts/verify/verify_storage_consumer.sh --help
 #
 # Prerequisites:
 #   docker compose up -d postgres kafka storage-consumer
@@ -40,7 +40,7 @@ SHOW_DEAD_LETTERS=5
 LAG_WARN_THRESHOLD=1000
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 FAILED_CHECKS=0
 WARNINGS=0
@@ -75,7 +75,7 @@ usage() {
 Verify the storage consumer is persisting Kafka messages to PostgreSQL.
 
 Usage:
-  ./scripts/verify_storage_consumer.sh [options]
+  ./scripts/verify/verify_storage_consumer.sh [options]
 
 Options:
   --dead-letters N     Show N recent dead-lettered messages. Default: 5
@@ -92,10 +92,10 @@ Exit status:
 
 Examples:
   # Routine check after starting the stack.
-  ./scripts/verify_storage_consumer.sh
+  ./scripts/verify/verify_storage_consumer.sh
 
   # Investigate rejected messages.
-  ./scripts/verify_storage_consumer.sh --dead-letters 25
+  ./scripts/verify/verify_storage_consumer.sh --dead-letters 25
 EOF
 }
 

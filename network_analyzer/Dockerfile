@@ -1,4 +1,4 @@
-# Build from the repository root so both the package and scripts/analyze_pcaps.sh
+# Build from the repository root so both the package and scripts/network/analyze_pcaps.sh
 # land in the image (the compose service sets context: . for this reason):
 #
 #   docker compose --profile tools build network-analyzer
@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY network_analyzer/ /app/network_analyzer/
 
 # Batch runner used by the default --batch entrypoint mode.
-COPY scripts/analyze_pcaps.sh /usr/local/bin/analyze_pcaps.sh
+COPY scripts/network/analyze_pcaps.sh /usr/local/bin/analyze_pcaps.sh
 COPY network_analyzer/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/analyze_pcaps.sh /usr/local/bin/docker-entrypoint.sh \
     && rm -rf /app/network_analyzer/tests /app/network_analyzer/.env.example \

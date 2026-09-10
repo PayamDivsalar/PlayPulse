@@ -1,7 +1,7 @@
 """Command-line entry point and composition root for the network analyzer.
 
 Analyzes a single capture file. Batch ingestion over a directory is the job of
-``scripts/analyze_pcaps.sh``, which drives this command once per file and uses
+``scripts/network/analyze_pcaps.sh``, which drives this command once per file and uses
 its exit code to decide where the file goes next.
 
 Usage::

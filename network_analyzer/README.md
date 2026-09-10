@@ -29,7 +29,7 @@ Two consequences worth knowing:
 ```mermaid
 flowchart LR
     Tester[Tester with PCAPdroid] -->|manual capture| Inbox[data/pcap/inbox]
-    Inbox --> Script[scripts/analyze_pcaps.sh]
+    Inbox --> Script[scripts/network/analyze_pcaps.sh]
     Script --> Analyzer[network_analyzer]
     Analyzer -->|validate package_name| AppAPI[App API]
     Analyzer -->|"JSON, key=package_name"| Topic[network-metrics topic]
@@ -312,15 +312,15 @@ The split between 5 and the rest is the useful part: an unreachable broker must
 not quarantine a perfectly good capture, and a malformed capture must not be
 retried forever.
 
-### Batch ingestion — `scripts/analyze_pcaps.sh`
+### Batch ingestion — `scripts/network/analyze_pcaps.sh`
 
 Drop captures into `data/pcap/inbox/` and run:
 
 ```bash
-./scripts/analyze_pcaps.sh                                    # analyze and publish
-./scripts/analyze_pcaps.sh --dry-run --skip-registry-check --keep
-./scripts/analyze_pcaps.sh --inbox ~/Downloads/PCAPdroid      # analyze elsewhere
-./scripts/analyze_pcaps.sh --help
+./scripts/network/analyze_pcaps.sh                                    # analyze and publish
+./scripts/network/analyze_pcaps.sh --dry-run --skip-registry-check --keep
+./scripts/network/analyze_pcaps.sh --inbox ~/Downloads/PCAPdroid      # analyze elsewhere
+./scripts/network/analyze_pcaps.sh --help
 ```
 
 Each capture is analyzed, then filed by exit code per the table above, leaving
@@ -337,15 +337,15 @@ the one it picks lacks the dependencies.
 Exits 0 when every capture was analyzed or the inbox was empty, 1 when anything
 failed or still needs a retry.
 
-### Verifying publication — `scripts/verify_network_metrics.sh`
+### Verifying publication — `scripts/verify/verify_network_metrics.sh`
 
 The Data Storage Subsystem does not exist yet, so there are no database rows to
 check and the topic is the only evidence that a message landed:
 
 ```bash
-./scripts/verify_network_metrics.sh                  # replay the topic
-./scripts/verify_network_metrics.sh --count-only     # just the message count
-./scripts/verify_network_metrics.sh --latest --max-messages 1 --timeout 60
+./scripts/verify/verify_network_metrics.sh                  # replay the topic
+./scripts/verify/verify_network_metrics.sh --count-only     # just the message count
+./scripts/verify/verify_network_metrics.sh --latest --max-messages 1 --timeout 60
 ```
 
 It checks that the broker is up and the topic exists, reports how many records
@@ -390,20 +390,11 @@ docker compose run --rm network-analyzer --help
 | `… --batch [options]` | Same, with extra batch flags |
 | `… --file /data/pcap/inbox/… [options]` | `python -m network_analyzer.main …` |
 | Host: `python -m network_analyzer.main --file data/pcap/inbox/…` | Same analyzer, no container |
-| Host: `./scripts/analyze_pcaps.sh` | Same batch script, no container |
+| Host: `./scripts/network/analyze_pcaps.sh` | Same batch script, no container |
 
 Host and container share one code path; Docker only changes where Kafka/App API
-hostnames come from (`docker-compose.yml` vs `network_analyzer/.env`).
-
-**Known limitation.** From inside the container the App API is reached at
-`http://host.docker.internal:8000`, but `app_api/config/settings.py` currently
-sets `ALLOWED_HOSTS = []`, so Django answers that hostname with HTTP 400 and the
-registry check fails. Until the App API becomes a compose service, either add
-`host.docker.internal` to `ALLOWED_HOSTS`, or run the container with
-`--skip-registry-check` (batch: `--batch --skip-registry-check`) and rely on the
-host-side run for validation. The same constraint applies to the crawler
-container. The analyzer reports this case as a configuration error rather than a
-retryable one, so a batch run fails loudly instead of looping.
+hostnames come from (`docker-compose.yml` vs `network_analyzer/.env`). Inside
+Compose the analyzer reaches the registry at `http://app-api:8000`.
 
 ## Testing
 

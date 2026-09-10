@@ -21,7 +21,7 @@ docker compose up -d postgres zookeeper kafka kafka-ui
 اختیاری — smoke test زیرساخت:
 
 ```bash
-./scripts/check_infra.sh
+./scripts/infra/check_infra.sh
 ```
 
 UI کافکا بعد از بالا آمدن در آدرس زیر در مرورگر باز می‌شود:
@@ -123,7 +123,7 @@ docker exec -it project_kafka kafka-console-consumer \
   --timeout-ms 15000
 ```
 
-الگو مشابه [`scripts/check_infra.sh`](../scripts/check_infra.sh) است: consumer داخل کانتینر `project_kafka` و bootstrap روی `localhost:9092`.
+الگو مشابه [`scripts/infra/check_infra.sh`](../scripts/infra/check_infra.sh) است: consumer داخل کانتینر `project_kafka` و bootstrap روی `localhost:9092`.
 
 ## ۵. چک‌لیست تأیید
 

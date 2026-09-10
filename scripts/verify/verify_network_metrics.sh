@@ -11,8 +11,8 @@
 # rows to check, and the topic is the only evidence available.
 #
 # Usage:
-#   ./scripts/verify_network_metrics.sh [options]
-#   ./scripts/verify_network_metrics.sh --help
+#   ./scripts/verify/verify_network_metrics.sh [options]
+#   ./scripts/verify/verify_network_metrics.sh --help
 #
 # Prerequisites: the Kafka container running via
 #   docker compose up -d zookeeper kafka
@@ -36,7 +36,7 @@ FROM_BEGINNING=true
 COUNT_ONLY=false
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 FAILED_CHECKS=0
 
@@ -65,7 +65,7 @@ usage() {
 Read network-metrics messages back off Kafka to verify the analyzer published.
 
 Usage:
-  ./scripts/verify_network_metrics.sh [options]
+  ./scripts/verify/verify_network_metrics.sh [options]
 
 Options:
   --max-messages N   Stop after N messages. Default: 10
@@ -84,13 +84,13 @@ Exit status:
 
 Examples:
   # Did anything get published at all?
-  ./scripts/verify_network_metrics.sh
+  ./scripts/verify/verify_network_metrics.sh
 
   # Watch for a message while running the analyzer in another terminal.
-  ./scripts/verify_network_metrics.sh --latest --max-messages 1 --timeout 60
+  ./scripts/verify/verify_network_metrics.sh --latest --max-messages 1 --timeout 60
 
   # How many analyses are on the topic?
-  ./scripts/verify_network_metrics.sh --count-only
+  ./scripts/verify/verify_network_metrics.sh --count-only
 EOF
 }
 
@@ -181,7 +181,7 @@ if echo "$TOPIC_LIST" | grep -qx "$TOPIC"; then
 else
     print_fail "Topic $TOPIC does not exist yet."
     echo "      It is created automatically the first time the analyzer publishes."
-    echo "      Run: ./scripts/analyze_pcaps.sh"
+    echo "      Run: ./scripts/network/analyze_pcaps.sh"
     exit 1
 fi
 

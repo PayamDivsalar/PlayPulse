@@ -541,7 +541,7 @@ flowchart TD
   <h2><span class="section-number">۱۷</span> عملیات: تأیید، Replay و مقیاس‌دهی</h2>
   <p>سه عملیات روزمره‌ی این زیرسیستم به‌صورت صریح مستند و ابزارمند شده‌اند.</p>
   <div class="table-wrapper"><table><thead><tr><th>عملیات</th><th>روش</th><th>نکته‌ی مهم</th></tr></thead><tbody>
-    <tr><td>تأیید سلامت استقرار</td><td>اسکریپت <code>scripts/verify_storage_consumer.sh</code></td><td>کل مسیر را به‌ترتیب بررسی می‌کند: نسخه‌ی اسکیما، تعداد Partition تاپیک‌ها، پیام‌های تولیدشده، ردیف‌های نوشته‌شده، پیام‌های مرده، و Lag هر Group — پس شکست، مرحله‌ی خراب را نشان می‌دهد نه کل Pipeline را</td></tr>
+    <tr><td>تأیید سلامت استقرار</td><td>اسکریپت <code>scripts/verify/verify_storage_consumer.sh</code></td><td>کل مسیر را به‌ترتیب بررسی می‌کند: نسخه‌ی اسکیما، تعداد Partition تاپیک‌ها، پیام‌های تولیدشده، ردیف‌های نوشته‌شده، پیام‌های مرده، و Lag هر Group — پس شکست، مرحله‌ی خراب را نشان می‌دهد نه کل Pipeline را</td></tr>
     <tr><td>Replay یک تاپیک</td><td>Reset کردن Offset همان Consumer Group به <code>earliest</code></td><td>چون هر تاپیک Group مستقل دارد، می‌توان <code>reviews</code> را برای بازسازی کامل جدولش Replay کرد <strong>بدون</strong> اینکه <code>app-stats</code> هم دوباره پردازش شود. Idempotency باعث می‌شود این کار داده را تکراری نکند</td></tr>
     <tr><td>مقیاس‌دهی یک Pipeline</td><td>اجرای نسخه‌ی دوم کانتینر با <code>STORAGE_PIPELINES</code> مخصوص همان Pipeline</td><td>چون هر تاپیک ۳ Partition دارد، تا ۳ عضو فعال در هر Group پشتیبانی می‌شود. همین متغیر اجازه می‌دهد همان Image به‌صورت سه کانتینر تک‌Pipeline با Restart Policy مستقل هم اجرا شود، بدون تغییر کد</td></tr>
   </tbody></table></div>
