@@ -24,7 +24,13 @@ class RateLimiter:
         self._lock = Lock()
 
     def acquire(self) -> None:
-        """Block until a request token is available."""
+        """Block until a request token is available.
+
+        Fractional tokens must be preserved while waiting. Zeroing them (and
+        letting every waiter refresh ``_last_refill``) lets concurrent workers
+        starve each other: the bucket never reaches a full token again after
+        the initial burst is spent.
+        """
 
         while True:
             sleep_seconds = 0.0
@@ -44,7 +50,6 @@ class RateLimiter:
 
                 missing_tokens = 1.0 - self._tokens
                 sleep_seconds = missing_tokens / self._refill_rate
-                self._tokens = 0.0
 
             jitter = uniform(0.0, 0.5)
             sleep(sleep_seconds + jitter)
