@@ -25,9 +25,25 @@ project-root/
   crawler/.env         # فقط اجرای venv کراولر
                        #   KAFKA_BOOTSTRAP_SERVERS=localhost:9092
                        #   APP_API_BASE_URL=http://127.0.0.1:8000
+  network_analyzer/.env  # فقط اجرای venv آنالایزر
+  storage_consumer/.env  # فقط اجرای venv مصرف‌کننده‌ی استوریج
+                       #   KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+                       #   POSTGRES_HOST=127.0.0.1
 ```
 
-نمونه‌ها: `.env.example` در ریشه، `crawler/.env.example`، `app_api/.env.example`.
+نمونه‌ها: `.env.example` در ریشه، `crawler/.env.example`،
+`app_api/.env.example`، `network_analyzer/.env.example`،
+`storage_consumer/.env.example`.
+
+`storage_consumer` تنها زیرسیستمی است که **هم** به Kafka و **هم** به
+PostgreSQL وصل می‌شود، پس هر دو دسته آدرس را دارد و همین آن را به بهترین
+مثال این تفکیک تبدیل می‌کند: روی host مقدار `localhost:9092` و
+`127.0.0.1` و داخل compose مقدار `kafka:29092` و `postgres`.
+
+نام متغیرهای `POSTGRES_*` عیناً همان‌های `app_api` هستند؛ این عمدی است چون
+هر دو به یک دیتابیس وصل می‌شوند. مالکیت جدول‌ها اما تفکیک‌شده است:
+جنگو مالک `applications` است و `storage_consumer` مالک چهار جدول خودش
+(برای جزئیات: `storage_consumer/README.md`).
 
 ## Docker چطور override می‌کند؟
 

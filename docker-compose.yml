@@ -52,6 +52,40 @@ services:
     networks:
       - project_network
 
+  # One-shot topic creation. Auto-create is left on for convenience, but it
+  # produces single-partition topics, which caps every consumer group at one
+  # active member forever -- a topic's partition count cannot be reduced, so
+  # discovering this under load means a rebuild. Creating them up front is the
+  # only cheap moment to get it right.
+  #
+  # Idempotent (--if-not-exists), so it is safe on every `up`. It will not
+  # widen a topic that already exists; see scripts/create_topics.sh --alter.
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: project_kafka_init
+    depends_on:
+      - kafka
+    restart: "no"
+    environment:
+      KAFKA_TOPIC_PARTITIONS: ${KAFKA_TOPIC_PARTITIONS:-3}
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        echo "Waiting for the broker..."
+        until kafka-broker-api-versions --bootstrap-server kafka:29092 >/dev/null 2>&1; do
+          sleep 2
+        done
+        for topic in app-stats reviews network-metrics; do
+          kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists \
+            --topic "$$topic" \
+            --partitions "$${KAFKA_TOPIC_PARTITIONS}" \
+            --replication-factor 1
+        done
+        kafka-topics --bootstrap-server kafka:29092 --list
+    networks:
+      - project_network
+
   kafka-ui:
     image: provectuslabs/kafka-ui:v0.7.2
     container_name: project_kafka_ui
@@ -84,6 +118,46 @@ services:
       APP_API_BASE_URL: http://host.docker.internal:8000
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - project_network
+
+  storage-consumer:
+    build: ./storage_consumer
+    container_name: project_storage_consumer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      # Docker-network addresses — intentionally NOT from storage_consumer/.env
+      # (that file is for host/venv: localhost:9092 and 127.0.0.1). See
+      # docs/setup.md.
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # One container, three threads. To deploy as three containers with
+      # independent restart policies instead, duplicate this service and set
+      # STORAGE_PIPELINES on each — no code change, and each keeps its own
+      # consumer group and offsets.
+      STORAGE_PIPELINES: ${STORAGE_PIPELINES:-all}
+    healthcheck:
+      # Per-pipeline liveness, not just "is the process up". See healthcheck.sh.
+      test: ["CMD", "healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      # Generous: the first poll can wait out a consumer-group join, and a
+      # cold start also runs migrations.
+      start_period: 90s
+      retries: 3
+    # SIGTERM is handled: workers finish their in-flight batch, commit, and
+    # leave the consumer group. Well above the batch time plus the database
+    # retry window, so a stop does not cut a write short and force a replay.
+    stop_grace_period: 45s
     networks:
       - project_network
 

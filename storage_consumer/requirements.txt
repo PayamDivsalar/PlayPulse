@@ -1,0 +1,6 @@
+kafka-python==2.2.15
+# Pinned to the same version app_api uses: both talk to the same Postgres, and
+# one driver version for one database keeps behaviour differences out of play.
+psycopg2-binary==2.9.12
+python-dotenv==1.0.1
+pytest==8.3.4
