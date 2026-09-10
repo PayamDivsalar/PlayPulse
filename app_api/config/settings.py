@@ -19,19 +19,49 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-load_dotenv()
+# Load app_api/.env for host/venv runs. Compose injects POSTGRES_* via
+# environment: and those values win (python-dotenv does not override).
+load_dotenv(BASE_DIR / '.env')
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def _env_list(name: str, default: list[str]) -> list[str]:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    return [item.strip() for item in raw.split(',') if item.strip()]
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-!uf$ec#lf_u_*@c*tdrg)2cos832*4gbb^n!)0&re!#&k^dj0('
+SECRET_KEY = os.getenv(
+    'DJANGO_SECRET_KEY',
+    'django-insecure-!uf$ec#lf_u_*@c*tdrg)2cos832*4gbb^n!)0&re!#&k^dj0(',
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = _env_bool('DJANGO_DEBUG', True)
 
-ALLOWED_HOSTS = []
+# Include the compose service DNS name so sibling containers can call
+# http://app-api:8000 without Django rejecting the Host header.
+ALLOWED_HOSTS = _env_list(
+    'DJANGO_ALLOWED_HOSTS',
+    [
+        'localhost',
+        '127.0.0.1',
+        '0.0.0.0',
+        'host.docker.internal',
+        'app-api',
+    ],
+)
 
 
 # Application definition
