@@ -20,8 +20,9 @@
 
 ```text
 project-root/
-  .env                 # فقط جایگزینی compose (POSTGRES_*, KAFKA_*_PORT, ...)
-  app_api/.env         # فقط اجرای venv جنگو (مثلاً POSTGRES_HOST=127.0.0.1)
+  .env                 # فقط جایگزینی compose (POSTGRES_*, KAFKA_*_PORT, APP_API_PORT, ...)
+  app_api/.env         # فقط اجرای venv جنگو روی host (مثلاً POSTGRES_HOST=127.0.0.1)
+                       # کانتینر app-api این فایل را نمی‌خواند
   crawler/.env         # فقط اجرای venv کراولر
                        #   KAFKA_BOOTSTRAP_SERVERS=localhost:9092
                        #   APP_API_BASE_URL=http://127.0.0.1:8000
@@ -47,14 +48,19 @@ PostgreSQL وصل می‌شود، پس هر دو دسته آدرس را دارد
 
 ## Docker چطور override می‌کند؟
 
-برای سرویس `crawler`، مقادیر مخصوص کانتینر **مستقیم** در
-`docker-compose.yml` → `environment:` تعریف شده‌اند (مثلاً
-`KAFKA_BOOTSTRAP_SERVERS: kafka:29092`). از `env_file: crawler/.env`
-استفاده **نمی‌کنیم**، چون همان فایل برای host است و hostname اشتباه به
-کانتینر می‌دهد.
+برای سرویس‌های `app-api`، `crawler` و `storage-consumer`، مقادیر مخصوص
+کانتینر **مستقیم** در `docker-compose.yml` → `environment:` تعریف شده‌اند
+(مثلاً `POSTGRES_HOST: postgres`، `KAFKA_BOOTSTRAP_SERVERS: kafka:29092`،
+`APP_API_BASE_URL: http://app-api:8000`). از `env_file: */.env` استفاده
+**نمی‌کنیم**، چون همان فایل برای host است و hostname اشتباه به کانتینر
+می‌دهد.
 
 `python-dotenv` متغیرهایی را که از قبل در محیط process ست شده‌اند
 بازنویسی نمی‌کند؛ پس داخل کانتینر، مقادیر compose مقدم‌اند.
+
+`app-api` روی استارت مهاجرت‌های Django را اعمال می‌کند و `/healthz/` را
+برای readiness در اختیار compose می‌گذارد. کراولر و `storage-consumer`
+با `depends_on: condition: service_healthy` منتظر آن می‌مانند.
 
 ## تنظیمات runtime کراولر
 
