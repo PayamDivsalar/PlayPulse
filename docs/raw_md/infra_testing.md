@@ -9,7 +9,7 @@
 <br>
 <p align="justify">
 <font size=4>
-پیش از شروع پیاده‌سازی هر بخش از منطق برنامه (Django، Crawler و ...)، لازم بود از سلامت و آماده‌به‌کار بودن زیرساخت پایه‌ی پروژه (PostgreSQL و Kafka) اطمینان حاصل شود. برای این منظور، به‌جای بررسی دستی و پراکنده، یک اسکریپت Smoke Test خودکار در مسیر <code>scripts/check_infra.sh</code> نوشته شده است که این بررسی را به‌صورت یکپارچه و تکرارپذیر انجام می‌دهد.
+پیش از شروع پیاده‌سازی هر بخش از منطق برنامه (Django، Crawler و ...)، لازم بود از سلامت و آماده‌به‌کار بودن زیرساخت پایه‌ی پروژه (PostgreSQL و Kafka) اطمینان حاصل شود. برای این منظور، به‌جای بررسی دستی و پراکنده، یک اسکریپت Smoke Test خودکار در مسیر <code>scripts/infra/check_infra.sh</code> نوشته شده است که این بررسی را به‌صورت یکپارچه و تکرارپذیر انجام می‌دهد.
 </font>
 </p>
 
@@ -55,8 +55,8 @@ docker compose up -d postgres zookeeper kafka
 </font>
 
 ```bash
-chmod +x scripts/check_infra.sh
-./scripts/check_infra.sh
+chmod +x scripts/infra/check_infra.sh
+./scripts/infra/check_infra.sh
 ```
 
 <font face="B Mitra" size=5>

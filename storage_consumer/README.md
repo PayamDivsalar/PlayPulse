@@ -55,12 +55,12 @@ With Docker Compose, from the repository root:
 cd app_api && python manage.py migrate && cd ..
 
 # Create the topics with several partitions (see kafka-init in compose).
-./scripts/create_topics.sh
+./scripts/infra/create_topics.sh
 
 docker compose up -d storage-consumer
 docker compose logs -f storage-consumer
 
-./scripts/verify_storage_consumer.sh
+./scripts/verify/verify_storage_consumer.sh
 ```
 
 The container applies its own migrations on every start, so there is no
@@ -178,7 +178,7 @@ belongs to a future subsystem.
 ### Verifying it works
 
 ```bash
-./scripts/verify_storage_consumer.sh
+./scripts/verify/verify_storage_consumer.sh
 ```
 
 Checks the schema, the container's health, consumer lag per pipeline, row
@@ -291,7 +291,7 @@ worst-case burst about six times faster than it arrives.
 If one pipeline's lag grows steadily rather than in bursts, it has outgrown
 that:
 
-1. Widen the topic — `./scripts/create_topics.sh --topic reviews --partitions 6
+1. Widen the topic — `./scripts/infra/create_topics.sh --topic reviews --partitions 6
    --alter`. A partition count can be increased but never reduced.
 2. Run a second container for that pipeline only, by duplicating the
    `storage-consumer` service with `STORAGE_PIPELINES: reviews`. Members of one

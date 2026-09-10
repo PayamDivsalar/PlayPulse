@@ -10,7 +10,7 @@
 # پایه (write/read) انجام داد.
 #
 # نحوه‌ی اجرا:
-#   ./scripts/check_infra.sh
+#   ./scripts/infra/check_infra.sh
 #
 # پیش‌نیاز: فایل .env در ریشه‌ی پروژه موجود باشد و سرویس‌ها با
 #   docker compose up -d postgres zookeeper kafka
@@ -58,7 +58,7 @@ container_is_running() {
 # --- بارگذاری متغیرهای محیطی -------------------------------------------------
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ENV_FILE="$PROJECT_ROOT/.env"
 
 if [[ -f "$ENV_FILE" ]]; then

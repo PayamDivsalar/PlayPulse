@@ -17,8 +17,8 @@
 # already exist.
 #
 # Usage:
-#   ./scripts/create_topics.sh [options]
-#   ./scripts/create_topics.sh --help
+#   ./scripts/infra/create_topics.sh [options]
+#   ./scripts/infra/create_topics.sh --help
 #
 # Prerequisites: the Kafka container running via
 #   docker compose up -d zookeeper kafka
@@ -67,7 +67,7 @@ usage() {
 Create the PlayPulse Kafka topics with a chosen partition count.
 
 Usage:
-  ./scripts/create_topics.sh [options]
+  ./scripts/infra/create_topics.sh [options]
 
 Options:
   --partitions N     Partition count for new topics. Default: 3
@@ -84,10 +84,10 @@ Exit status:
 
 Examples:
   # First-time setup, before anything produces.
-  ./scripts/create_topics.sh
+  ./scripts/infra/create_topics.sh
 
   # Widen reviews for a second consumer container.
-  ./scripts/create_topics.sh --topic reviews --partitions 6 --alter
+  ./scripts/infra/create_topics.sh --topic reviews --partitions 6 --alter
 EOF
 }
 

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, NamedTuple
 
 from crawler.app_registry_client import AppRegistryClient
+from crawler.cycle_report import write_pending_cycle_report
 from crawler.data_mapper import map_app_details, map_review
 from crawler.kafka_producer import CrawlerKafkaProducer
 from crawler.playstore_client import PlayStoreClient
@@ -17,6 +20,7 @@ logger = logging.getLogger(__name__)
 class AppCrawlResult(NamedTuple):
     """Per-app outcome for independently tracked stats and reviews work."""
 
+    package_name: str
     stats_ok: bool
     reviews_ok: bool
 
@@ -32,12 +36,16 @@ class CrawlerService:
         *,
         max_workers: int,
         reviews_fetch_count: int,
+        cycle_reports_enabled: bool = False,
+        cycle_reports_dir: str = "/data/reports",
     ) -> None:
         self.playstore_client = playstore_client
         self.kafka_producer = kafka_producer
         self.app_registry_client = app_registry_client
         self.max_workers = max_workers
         self.reviews_fetch_count = reviews_fetch_count
+        self.cycle_reports_enabled = cycle_reports_enabled
+        self.cycle_reports_dir = cycle_reports_dir
 
     def _crawl_single_app(self, app: dict[str, Any]) -> AppCrawlResult:
         """Fetch and publish stats and reviews for one app in the same worker.
@@ -80,7 +88,11 @@ class CrawlerService:
                 exc_info=True,
             )
 
-        return AppCrawlResult(stats_ok=stats_ok, reviews_ok=reviews_ok)
+        return AppCrawlResult(
+            package_name=package_name,
+            stats_ok=stats_ok,
+            reviews_ok=reviews_ok,
+        )
 
     @staticmethod
     def _get_package_name(app: dict[str, Any]) -> str | None:
@@ -100,8 +112,11 @@ class CrawlerService:
             logger.info("No active applications found for crawling; skipping cycle.")
             return
 
+        started_at = datetime.now(timezone.utc)
         stats_success = 0
         reviews_success = 0
+        failed_stats: list[str] = []
+        failed_reviews: list[str] = []
         total = len(apps)
 
         try:
@@ -118,18 +133,27 @@ class CrawlerService:
                         result = future.result()
                         if result.stats_ok:
                             stats_success += 1
+                        elif result.package_name:
+                            failed_stats.append(result.package_name)
                         if result.reviews_ok:
                             reviews_success += 1
+                        elif result.package_name:
+                            failed_reviews.append(result.package_name)
                     except Exception:
                         logger.error(
                             "Unexpected crawl failure package_name=%s",
                             package_name,
                             exc_info=True,
                         )
+                        if package_name:
+                            failed_stats.append(package_name)
+                            failed_reviews.append(package_name)
         finally:
             # Flush buffered messages even if the cycle errors out, so
             # successfully-sent stats/reviews are not lost on shutdown.
             self.kafka_producer.flush()
+
+        finished_at = datetime.now(timezone.utc)
 
         logger.info(
             "Crawl cycle summary: total=%s app_stats=%s/%s success reviews=%s/%s success",
@@ -139,3 +163,15 @@ class CrawlerService:
             reviews_success,
             total,
         )
+
+        if self.cycle_reports_enabled:
+            write_pending_cycle_report(
+                Path(self.cycle_reports_dir),
+                started_at=started_at,
+                finished_at=finished_at,
+                apps_total=total,
+                stats_ok=stats_success,
+                reviews_ok=reviews_success,
+                failed_stats=sorted(set(failed_stats)),
+                failed_reviews=sorted(set(failed_reviews)),
+            )

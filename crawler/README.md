@@ -40,7 +40,7 @@ docker compose up -d --build crawler
 ```
 
 Container addresses come from `docker-compose.yml` `environment:`
-(`kafka:29092`, `host.docker.internal:8000`) — not from `crawler/.env`.
+(`kafka:29092`, `http://app-api:8000`) — not from `crawler/.env`.
 
 ## Running tests
 

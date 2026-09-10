@@ -43,6 +43,10 @@ class Settings:
     kafka_producer_delivery_timeout_ms: int = 15000
     kafka_send_retry_max_attempts: int = 3
     kafka_send_retry_base_delay_seconds: float = 5.0
+    # Off by default: when true, each finished cycle writes a pending JSON
+    # under cycle_reports_dir for scripts/reports/finalize_cycle_reports.py.
+    cycle_reports_enabled: bool = False
+    cycle_reports_dir: str = "/data/reports"
 
     def __post_init__(self) -> None:
         if not self.kafka_bootstrap_servers.strip():
@@ -94,6 +98,10 @@ class Settings:
         if self.kafka_send_retry_base_delay_seconds < 0:
             raise CrawlerConfigError(
                 "kafka_send_retry_base_delay_seconds must be >= 0."
+            )
+        if self.cycle_reports_enabled and not self.cycle_reports_dir.strip():
+            raise CrawlerConfigError(
+                "cycle_reports_dir must not be empty when cycle reports are enabled."
             )
 
     @classmethod
@@ -182,5 +190,9 @@ def load_settings(env_file: Path | None = None) -> Settings:
         ),
         kafka_send_retry_base_delay_seconds=_env_float(
             "CRAWLER_KAFKA_SEND_RETRY_BASE_DELAY_SECONDS", 5.0
+        ),
+        cycle_reports_enabled=_env_bool("CRAWLER_CYCLE_REPORTS_ENABLED", False),
+        cycle_reports_dir=(
+            os.getenv("CRAWLER_CYCLE_REPORTS_DIR", "/data/reports") or "/data/reports"
         ),
     )

@@ -59,7 +59,7 @@ services:
   # only cheap moment to get it right.
   #
   # Idempotent (--if-not-exists), so it is safe on every `up`. It will not
-  # widen a topic that already exists; see scripts/create_topics.sh --alter.
+  # widen a topic that already exists; see scripts/infra/create_topics.sh --alter.
   kafka-init:
     image: confluentinc/cp-kafka:7.6.0
     container_name: project_kafka_init
@@ -106,18 +106,56 @@ services:
     container_name: project_crawler
     restart: unless-stopped
     depends_on:
-      - postgres
-      - kafka
-      - zookeeper
+      postgres:
+        condition: service_started
+      kafka:
+        condition: service_started
+      zookeeper:
+        condition: service_started
+      app-api:
+        condition: service_healthy
     environment:
       # Docker-network addresses — intentionally NOT from crawler/.env
       # (that file is for host/venv: localhost:9092). See docs/setup.md.
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      # TODO: replace once App API (Django) is added as a compose service.
-      # Until then, App API is assumed to run on the host at :8000.
-      APP_API_BASE_URL: http://host.docker.internal:8000
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      APP_API_BASE_URL: http://app-api:8000
+      # Cycle reports default off. Enable via root .env or:
+      #   ./scripts/bring_up.sh --with-cycle-reports
+      CRAWLER_CYCLE_REPORTS_ENABLED: ${CRAWLER_CYCLE_REPORTS_ENABLED:-false}
+      CRAWLER_CYCLE_REPORTS_DIR: ${CRAWLER_CYCLE_REPORTS_DIR:-/data/reports}
+    volumes:
+      # Pending/final cycle reports (only written when reports are enabled).
+      - ./data/reports:/data/reports
+    networks:
+      - project_network
+
+  app-api:
+    build: ./app_api
+    container_name: project_app_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Docker-network addresses — intentionally NOT from app_api/.env
+      # (that file is for host/venv: POSTGRES_HOST=127.0.0.1). See docs/setup.md.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Optional overrides; defaults in settings.py keep local compose usable.
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-true}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,host.docker.internal,app-api}
+    ports:
+      - "${APP_API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      # Cold start waits for Postgres then runs migrate.
+      start_period: 60s
+      retries: 5
     networks:
       - project_network
 
@@ -130,6 +168,9 @@ services:
         condition: service_healthy
       kafka:
         condition: service_started
+      # Owns apps_registry_application via Django migrations; consumer FKs need it.
+      app-api:
+        condition: service_healthy
     environment:
       # Docker-network addresses — intentionally NOT from storage_consumer/.env
       # (that file is for host/venv: localhost:9092 and 127.0.0.1). See
@@ -163,7 +204,7 @@ services:
 
   network-analyzer:
     # Context is the repo root so the image can include both the package and
-    # scripts/analyze_pcaps.sh. The entrypoint dispatches --batch (default) vs
+    # scripts/network/analyze_pcaps.sh. The entrypoint dispatches --batch (default) vs
     # single-file `python -m network_analyzer.main` arguments.
     build:
       context: .
@@ -179,22 +220,53 @@ services:
     profiles:
       - tools
     depends_on:
-      - kafka
+      kafka:
+        condition: service_started
+      app-api:
+        condition: service_healthy
     environment:
       # Docker-network addresses — intentionally NOT from network_analyzer/.env
       # (that file is for host/venv: localhost:9092). See docs/setup.md.
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      # TODO: replace once App API (Django) is added as a compose service.
-      # Until then, App API is assumed to run on the host at :8000.
-      APP_API_BASE_URL: http://host.docker.internal:8000
+      APP_API_BASE_URL: http://app-api:8000
       ANALYZER_PCAP_ROOT: /data/pcap
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       # Captures are recorded on a phone and copied in by hand, so the inbox is
       # a bind mount rather than a named volume: the operator needs to drop
       # files into it from the host.
       - ./data/pcap:/data/pcap
+    networks:
+      - project_network
+
+  # Not a subsystem: same storage-consumer image (already has kafka-python +
+  # psycopg2), overrides the entrypoint to run one mounted script in a loop.
+  # Started only via: ./scripts/bring_up.sh --with-cycle-reports
+  cycle-reporter:
+    build: ./storage_consumer
+    container_name: project_cycle_reporter
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      storage-consumer:
+        condition: service_healthy
+    entrypoint: ["python", "/scripts/reports/finalize_cycle_reports.py"]
+    command: ["--loop"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      CYCLE_REPORTS_DIR: /data/reports
+      CYCLE_REPORTS_INTERVAL_SECONDS: ${CYCLE_REPORTS_INTERVAL_SECONDS:-60}
+      CYCLE_REPORTS_LAG_TIMEOUT: ${CYCLE_REPORTS_LAG_TIMEOUT:-600}
+    volumes:
+      - ./scripts/reports/finalize_cycle_reports.py:/scripts/reports/finalize_cycle_reports.py:ro
+      - ./data/reports:/data/reports
     networks:
       - project_network
 

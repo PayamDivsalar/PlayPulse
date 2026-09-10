@@ -24,8 +24,8 @@
 # belongs to without per-file arguments.
 #
 # Usage:
-#   ./scripts/analyze_pcaps.sh [options]
-#   ./scripts/analyze_pcaps.sh --help
+#   ./scripts/network/analyze_pcaps.sh [options]
+#   ./scripts/network/analyze_pcaps.sh --help
 #
 # Prerequisites: the analyzer's dependencies installed in a Python environment
 # (see network_analyzer/requirements.txt), plus Kafka and the App API reachable
@@ -49,7 +49,7 @@ readonly ANALYZER_EXIT_TRANSPORT_FAILURE=5
 
 # --- Paths -------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # --- Defaults ----------------------------------------------------------------
 INBOX_DIR="$PROJECT_ROOT/data/pcap/inbox"
@@ -94,7 +94,7 @@ usage() {
 Batch-analyze PCAPdroid captures and publish their metrics to Kafka.
 
 Usage:
-  ./scripts/analyze_pcaps.sh [options]
+  ./scripts/network/analyze_pcaps.sh [options]
 
 Options:
   --inbox DIR             Directory holding captures to analyze.
@@ -117,13 +117,13 @@ Exit status:
 
 Examples:
   # Normal run: analyze everything new and publish it.
-  ./scripts/analyze_pcaps.sh
+  ./scripts/network/analyze_pcaps.sh
 
   # Inspect the numbers first, touching neither Kafka nor the App API.
-  ./scripts/analyze_pcaps.sh --dry-run --skip-registry-check --keep
+  ./scripts/network/analyze_pcaps.sh --dry-run --skip-registry-check --keep
 
   # Analyze captures sitting somewhere else.
-  ./scripts/analyze_pcaps.sh --inbox ~/Downloads/PCAPdroid
+  ./scripts/network/analyze_pcaps.sh --inbox ~/Downloads/PCAPdroid
 EOF
 }
 
@@ -348,7 +348,7 @@ if [[ $FAILED -eq 0 && $RETRYABLE -eq 0 ]]; then
     print_ok "All captures analyzed successfully."
     if [[ "$DRY_RUN" != true ]]; then
         echo "  Confirm the messages landed with:"
-        echo "    ./scripts/verify_network_metrics.sh"
+        echo "    ./scripts/verify/verify_network_metrics.sh"
     fi
     exit 0
 fi

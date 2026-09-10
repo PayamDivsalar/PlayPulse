@@ -227,5 +227,10 @@ data/pcap/**
 !data/pcap/**/
 !data/pcap/**/.gitkeep
 
-# Local analyzer virtualenv created by scripts/analyze_pcaps.sh auto-detection.
+# Crawl/persist cycle reports (pending + cycles.jsonl). Keep directory markers.
+data/reports/**
+!data/reports/**/
+!data/reports/**/.gitkeep
+
+# Local analyzer virtualenv created by scripts/network/analyze_pcaps.sh auto-detection.
 .venv-analyzer/

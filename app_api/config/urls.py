@@ -20,6 +20,8 @@ from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from rest_framework import permissions
 
+from apps_registry.health import healthz
+
 # Swagger/OpenAPI Schema Configuration
 schema_view = get_schema_view(
     openapi.Info(
@@ -35,7 +37,8 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    
+    path('healthz/', healthz, name='healthz'),
+
     # API endpoints
     path('api/', include('apps_registry.urls')),
     
