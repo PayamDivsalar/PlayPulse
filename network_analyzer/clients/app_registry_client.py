@@ -19,7 +19,7 @@ from network_analyzer.exceptions import (
     ApplicationNotEligibleError,
     RegistryRequestError,
 )
-from network_analyzer.retry_policy import with_retry
+from network_analyzer.common.retry_policy import with_retry
 
 logger = logging.getLogger(__name__)
 

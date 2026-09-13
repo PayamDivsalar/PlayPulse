@@ -10,13 +10,13 @@ from unittest.mock import Mock
 
 from kafka.errors import KafkaTimeoutError
 
-from network_analyzer.analyzer_service import AnalyzerService
+from network_analyzer.runtime.analyzer_service import AnalyzerService
 from network_analyzer.exceptions import (
     ApplicationNotEligibleError,
     FilenameConventionError,
     PcapReadError,
 )
-from network_analyzer.models import Scenario
+from network_analyzer.core.models import Scenario
 from network_analyzer.tests.synthetic_pcap import (
     Capture,
     handshake,

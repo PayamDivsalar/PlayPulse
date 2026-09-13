@@ -10,7 +10,7 @@ from kafka import KafkaProducer
 from kafka.errors import KafkaError
 
 from network_analyzer.config import Settings
-from network_analyzer.retry_policy import with_retry
+from network_analyzer.common.retry_policy import with_retry
 
 logger = logging.getLogger(__name__)
 

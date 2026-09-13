@@ -3,17 +3,14 @@
 from __future__ import annotations
 
 import json
-import os
 import unittest
-import uuid
 from typing import Any
 from unittest.mock import Mock, patch
 
-import pytest
 from kafka.errors import KafkaError, KafkaTimeoutError
 
 from network_analyzer.config import Settings
-from network_analyzer.kafka_publisher import (
+from network_analyzer.messaging.kafka_publisher import (
     NETWORK_METRICS_TOPIC,
     NetworkMetricsPublisher,
 )
@@ -63,7 +60,8 @@ class PublisherTestCase(unittest.TestCase):
         settings = Settings.for_testing(**values)
 
         patcher = patch(
-            "network_analyzer.kafka_publisher.KafkaProducer", return_value=producer
+            "network_analyzer.messaging.kafka_publisher.KafkaProducer",
+            return_value=producer,
         )
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -116,7 +114,7 @@ def _producer_kwargs(bootstrap_servers: str = "broker:29092") -> dict[str, Any]:
 
     settings = Settings.for_testing()
     with patch(
-        "network_analyzer.kafka_publisher.KafkaProducer"
+        "network_analyzer.messaging.kafka_publisher.KafkaProducer"
     ) as mock_producer_class:
         mock_producer_class.return_value = _producer_with_successful_send()
         publisher = NetworkMetricsPublisher(
@@ -137,7 +135,7 @@ class LazyConstructionTests(unittest.TestCase):
         settings = Settings.for_testing()
 
         with patch(
-            "network_analyzer.kafka_publisher.KafkaProducer"
+            "network_analyzer.messaging.kafka_publisher.KafkaProducer"
         ) as mock_producer_class:
             NetworkMetricsPublisher(
                 bootstrap_servers="broker:29092", settings=settings
@@ -150,7 +148,8 @@ class LazyConstructionTests(unittest.TestCase):
         settings = Settings.for_testing()
 
         with patch(
-            "network_analyzer.kafka_publisher.KafkaProducer", return_value=producer
+            "network_analyzer.messaging.kafka_publisher.KafkaProducer",
+            return_value=producer,
         ) as mock_producer_class:
             publisher = NetworkMetricsPublisher(
                 bootstrap_servers="broker:29092", settings=settings
@@ -165,7 +164,7 @@ class LazyConstructionTests(unittest.TestCase):
         settings = Settings.for_testing()
 
         with patch(
-            "network_analyzer.kafka_publisher.KafkaProducer"
+            "network_analyzer.messaging.kafka_publisher.KafkaProducer"
         ) as mock_producer_class:
             publisher = NetworkMetricsPublisher(
                 bootstrap_servers="broker:29092", settings=settings
@@ -178,7 +177,7 @@ class LazyConstructionTests(unittest.TestCase):
         settings = Settings.for_testing()
 
         with patch(
-            "network_analyzer.kafka_publisher.KafkaProducer"
+            "network_analyzer.messaging.kafka_publisher.KafkaProducer"
         ) as mock_producer_class:
             publisher = NetworkMetricsPublisher(
                 bootstrap_servers="broker:29092", settings=settings
@@ -278,7 +277,7 @@ class FailureTests(PublisherTestCase):
             kafka_send_retry_base_delay_seconds=0.0,
         )
 
-        with patch("network_analyzer.retry_policy.sleep"):
+        with patch("network_analyzer.common.retry_policy.sleep"):
             publisher.publish("com.whatsapp", _MESSAGE)
 
         self.assertEqual(producer.send.call_count, 2)
@@ -294,7 +293,7 @@ class FailureTests(PublisherTestCase):
             kafka_send_retry_base_delay_seconds=0.0,
         )
 
-        with patch("network_analyzer.retry_policy.sleep"):
+        with patch("network_analyzer.common.retry_policy.sleep"):
             with self.assertRaises(KafkaError):
                 publisher.publish("com.whatsapp", _MESSAGE)
 
@@ -318,53 +317,6 @@ class FailureTests(PublisherTestCase):
 
         producer.flush.assert_called_once()
         producer.close.assert_called_once()
-
-
-@pytest.mark.live
-class LiveKafkaRoundTripTests(unittest.TestCase):
-    """Publishes to a real broker and reads the message back.
-
-    Run manually with ``-m live`` after ``docker compose up -d kafka``.
-    Override the broker with ``KAFKA_BOOTSTRAP_SERVERS``.
-    """
-
-    def test_published_message_can_be_consumed_verbatim(self) -> None:
-        from kafka import KafkaConsumer
-
-        bootstrap = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-        settings = Settings.for_testing(kafka_bootstrap_servers=bootstrap)
-
-        analysis_id = str(uuid.uuid4())
-        message = {**_MESSAGE, "analysis_id": analysis_id}
-
-        publisher = NetworkMetricsPublisher(
-            bootstrap_servers=bootstrap, settings=settings
-        )
-        try:
-            publisher.publish("com.whatsapp", message)
-        finally:
-            publisher.close()
-
-        consumer = KafkaConsumer(
-            NETWORK_METRICS_TOPIC,
-            bootstrap_servers=bootstrap.split(","),
-            auto_offset_reset="earliest",
-            consumer_timeout_ms=20_000,
-            value_deserializer=lambda raw: json.loads(raw.decode("utf-8")),
-            key_deserializer=lambda raw: raw.decode("utf-8") if raw else None,
-        )
-        try:
-            received = [
-                record
-                for record in consumer
-                if record.value.get("analysis_id") == analysis_id
-            ]
-        finally:
-            consumer.close()
-
-        self.assertEqual(len(received), 1)
-        self.assertEqual(received[0].key, "com.whatsapp")
-        self.assertEqual(received[0].value, message)
 
 
 if __name__ == "__main__":

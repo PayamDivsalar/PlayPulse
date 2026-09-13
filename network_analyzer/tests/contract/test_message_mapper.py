@@ -11,8 +11,8 @@ import json
 import unittest
 from datetime import datetime, timezone
 
-from network_analyzer.message_mapper import map_analysis_result
-from network_analyzer.models import AnalysisResult, NetworkMetrics, Scenario
+from network_analyzer.core.message_mapper import map_analysis_result
+from network_analyzer.core.models import AnalysisResult, NetworkMetrics, Scenario
 
 _EXPECTED_KEYS = {
     "analysis_id",

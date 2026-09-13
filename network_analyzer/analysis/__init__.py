@@ -1,9 +1,10 @@
 """Pure analysis core.
 
-Every module in this package is free of infrastructure: it imports only the
-standard library, ``dpkt``, and the analyzer's domain model. No Kafka, no HTTP,
-no database, no configuration. That constraint is what lets the metrics be
-verified against synthetic captures with known ground truth.
+This package may import only ``dpkt``, the Python standard library,
+``network_analyzer.core.models``, and ``network_analyzer.exceptions``. It must
+never import Kafka, HTTP clients, or ``network_analyzer.config``. That
+constraint is what lets the metrics be verified against synthetic captures
+with known ground truth.
 """
 
 from network_analyzer.analysis.metrics_calculator import analyze_capture

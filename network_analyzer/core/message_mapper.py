@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from network_analyzer.models import AnalysisResult
+from network_analyzer.core.models import AnalysisResult
 
 # Milliseconds to microsecond precision. Capture timestamps do not justify more,
 # and unrounded floats would put values like 24.999999999999996 on the topic.

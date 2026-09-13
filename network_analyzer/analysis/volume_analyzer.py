@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from network_analyzer.models import ParsedPacket
+from network_analyzer.core.models import ParsedPacket
 
 
 @dataclass(frozen=True, slots=True)

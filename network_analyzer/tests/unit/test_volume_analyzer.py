@@ -8,7 +8,7 @@ from pathlib import Path
 
 from network_analyzer.analysis.packet_reader import read_packets
 from network_analyzer.analysis.volume_analyzer import VolumeAnalyzer
-from network_analyzer.models import ParsedPacket
+from network_analyzer.core.models import ParsedPacket
 from network_analyzer.tests.synthetic_pcap import (
     Capture,
     tcp_packet,

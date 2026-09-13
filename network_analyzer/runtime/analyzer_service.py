@@ -2,8 +2,8 @@
 
 Holds the use case -- resolve, validate, analyze, publish -- and nothing else.
 It knows the *order* of the steps but none of their mechanics: pcap decoding
-lives in ``analysis``, registry lookups in ``app_registry_client``, delivery in
-``kafka_publisher``.
+lives in ``analysis``, registry lookups in ``clients.app_registry_client``, delivery in
+``messaging.kafka_publisher``.
 """
 
 from __future__ import annotations
@@ -15,11 +15,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from network_analyzer.analysis.metrics_calculator import analyze_capture
-from network_analyzer.app_registry_client import AppRegistryClient
-from network_analyzer.filename_parser import parse_capture_filename
-from network_analyzer.kafka_publisher import NetworkMetricsPublisher
-from network_analyzer.message_mapper import map_analysis_result
-from network_analyzer.models import AnalysisResult, Scenario
+from network_analyzer.clients.app_registry_client import AppRegistryClient
+from network_analyzer.core.filename_parser import parse_capture_filename
+from network_analyzer.messaging.kafka_publisher import NetworkMetricsPublisher
+from network_analyzer.core.message_mapper import map_analysis_result
+from network_analyzer.core.models import AnalysisResult, Scenario
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from network_analyzer.exceptions import NetworkAnalyzerError
-from network_analyzer.models import NetworkMetrics, Scenario, TcpSegment
+from network_analyzer.core.models import NetworkMetrics, Scenario, TcpSegment
 
 
 def _metrics(**overrides: object) -> NetworkMetrics:

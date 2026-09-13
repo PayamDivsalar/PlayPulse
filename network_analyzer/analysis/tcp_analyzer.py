@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from network_analyzer.models import ParsedPacket, TcpSegment
+from network_analyzer.core.models import ParsedPacket, TcpSegment
 
 logger = logging.getLogger(__name__)
 
