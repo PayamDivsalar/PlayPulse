@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from storage_consumer.events import (
+from storage_consumer.core.events import (
     AppStatsEvent,
     BoundRecord,
     NetworkMetricEvent,

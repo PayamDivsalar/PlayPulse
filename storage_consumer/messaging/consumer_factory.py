@@ -13,7 +13,7 @@ from kafka import KafkaConsumer
 from kafka.consumer.subscription_state import ConsumerRebalanceListener
 
 from storage_consumer.config import Settings
-from storage_consumer.pipelines import PipelineSpec
+from storage_consumer.messaging.pipelines import PipelineSpec
 
 logger = logging.getLogger(__name__)
 

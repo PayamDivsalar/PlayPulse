@@ -13,12 +13,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from storage_consumer.config import Settings
-from storage_consumer.decoders import (
+from storage_consumer.core.decoders import (
     decode_app_stats,
     decode_network_metric,
     decode_review,
 )
-from storage_consumer.events import DecodedEvent
+from storage_consumer.core.events import DecodedEvent
 from storage_consumer.persistence.app_stats_repository import AppStatsRepository
 from storage_consumer.persistence.network_metric_repository import (
     NetworkMetricRepository,

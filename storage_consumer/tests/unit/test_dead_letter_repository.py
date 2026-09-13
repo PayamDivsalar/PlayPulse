@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import unittest
 
-from storage_consumer.events import RecordCoordinates, RejectedRecord
+from storage_consumer.core.events import RecordCoordinates, RejectedRecord
 from storage_consumer.persistence.dead_letter_repository import (
     MAX_LOGGED_PER_BATCH,
     MAX_PAYLOAD_BYTES,

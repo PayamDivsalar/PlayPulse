@@ -24,18 +24,18 @@ from typing import Any
 
 from kafka.errors import CommitFailedError, KafkaError
 
-from storage_consumer.batching import (
+from storage_consumer.core.batching import (
     bind_application_ids,
     decode_batch,
     dedupe_by_key,
 )
 from storage_consumer.config import Settings
-from storage_consumer.heartbeat import Heartbeat
+from storage_consumer.runtime.heartbeat import Heartbeat
 from storage_consumer.persistence.application_resolver import ApplicationResolver
 from storage_consumer.persistence.database import Database
 from storage_consumer.persistence.dead_letter_repository import DeadLetterRepository
-from storage_consumer.pipelines import PipelineSpec
-from storage_consumer.retry_policy import TRANSIENT_DB_EXCEPTIONS, with_retry
+from storage_consumer.messaging.pipelines import PipelineSpec
+from storage_consumer.common.retry_policy import TRANSIENT_DB_EXCEPTIONS, with_retry
 
 logger = logging.getLogger(__name__)
 

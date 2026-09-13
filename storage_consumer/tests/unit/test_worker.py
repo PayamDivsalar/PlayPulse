@@ -24,11 +24,11 @@ import psycopg2
 from kafka.errors import CommitFailedError, KafkaError
 
 from storage_consumer.config import Settings
-from storage_consumer.decoders import decode_app_stats
+from storage_consumer.core.decoders import decode_app_stats
 from storage_consumer.persistence.repository import WriteOutcome
-from storage_consumer.pipelines import PipelineSpec
-from storage_consumer.tests.test_decoders import app_stats_payload
-from storage_consumer.worker import MAX_CONSECUTIVE_COMMIT_FAILURES, Worker
+from storage_consumer.messaging.pipelines import PipelineSpec
+from storage_consumer.tests.contract.test_decoders import app_stats_payload
+from storage_consumer.runtime.worker import MAX_CONSECUTIVE_COMMIT_FAILURES, Worker
 
 
 class FakeTopicPartition:
@@ -156,7 +156,7 @@ def _payload(**overrides: object) -> bytes:
 
 class WorkerTestCase(unittest.TestCase):
     def setUp(self) -> None:
-        patcher = mock.patch("storage_consumer.retry_policy.sleep")
+        patcher = mock.patch("storage_consumer.common.retry_policy.sleep")
         self.sleep = patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -499,7 +499,7 @@ class HeartbeatTests(WorkerTestCase):
         import tempfile
         from pathlib import Path
 
-        from storage_consumer.heartbeat import Heartbeat
+        from storage_consumer.runtime.heartbeat import Heartbeat
         from storage_consumer.persistence.application_resolver import (
             ApplicationResolver,
         )

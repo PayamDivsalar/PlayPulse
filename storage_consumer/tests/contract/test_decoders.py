@@ -17,7 +17,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from storage_consumer.decoders import (
+from storage_consumer.core.decoders import (
     APP_STATS_FIELDS,
     NETWORK_METRIC_FIELDS,
     REVIEW_FIELDS,

@@ -29,8 +29,8 @@ from kafka import KafkaConsumer, KafkaProducer, TopicPartition
 from kafka.admin import KafkaAdminClient, NewTopic
 from kafka.structs import OffsetAndMetadata
 
-from storage_consumer.consumer_factory import create_consumer
-from storage_consumer.decoders import (
+from storage_consumer.messaging.consumer_factory import create_consumer
+from storage_consumer.core.decoders import (
     decode_app_stats,
     decode_network_metric,
     decode_review,
@@ -44,10 +44,10 @@ from storage_consumer.persistence.network_metric_repository import (
     NetworkMetricRepository,
 )
 from storage_consumer.persistence.review_repository import ReviewRepository
-from storage_consumer.pipelines import PipelineSpec
-from storage_consumer.supervisor import Supervisor
+from storage_consumer.messaging.pipelines import PipelineSpec
+from storage_consumer.runtime.supervisor import Supervisor
 from storage_consumer.tests import integration_support
-from storage_consumer.worker import Worker
+from storage_consumer.runtime.worker import Worker
 
 # How long a test waits for rows to appear before declaring the pipeline stuck.
 _DRAIN_TIMEOUT_SECONDS = 45.0

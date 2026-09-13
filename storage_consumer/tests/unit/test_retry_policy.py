@@ -14,7 +14,7 @@ import psycopg2
 from kafka.errors import CommitFailedError, KafkaError
 
 from storage_consumer.exceptions import MessageDecodeError
-from storage_consumer.retry_policy import (
+from storage_consumer.common.retry_policy import (
     TRANSIENT_DB_EXCEPTIONS,
     TRANSIENT_KAFKA_EXCEPTIONS,
     backoff_delay_seconds,
@@ -31,7 +31,7 @@ class BackoffTests(unittest.TestCase):
 
 class RetryMechanicsTests(unittest.TestCase):
     def setUp(self) -> None:
-        patcher = mock.patch("storage_consumer.retry_policy.sleep")
+        patcher = mock.patch("storage_consumer.common.retry_policy.sleep")
         self.sleep = patcher.start()
         self.addCleanup(patcher.stop)
 

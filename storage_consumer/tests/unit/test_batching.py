@@ -11,21 +11,21 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from storage_consumer.batching import (
+from storage_consumer.core.batching import (
     bind_application_ids,
     coordinates_of,
     decode_batch,
     dedupe_by_key,
 )
-from storage_consumer.decoders import decode_app_stats, decode_review
-from storage_consumer.events import (
+from storage_consumer.core.decoders import decode_app_stats, decode_review
+from storage_consumer.core.events import (
     AppStatsEvent,
     BoundRecord,
     DecodedRecord,
     RecordCoordinates,
     ReviewEvent,
 )
-from storage_consumer.tests.test_decoders import app_stats_payload, review_payload
+from storage_consumer.tests.contract.test_decoders import app_stats_payload, review_payload
 
 _BASE_TIME = datetime(2026, 9, 7, 14, tzinfo=timezone.utc)
 

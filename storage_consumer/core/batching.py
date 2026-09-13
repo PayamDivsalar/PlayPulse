@@ -19,8 +19,8 @@ import logging
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any
 
-from storage_consumer.decoders import parse_json
-from storage_consumer.events import (
+from storage_consumer.core.decoders import parse_json
+from storage_consumer.core.events import (
     BoundRecord,
     ConflictKey,
     DecodedEvent,

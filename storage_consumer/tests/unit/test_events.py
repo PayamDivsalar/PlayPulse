@@ -11,7 +11,7 @@ import dataclasses
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from storage_consumer.events import AppStatsEvent, NetworkMetricEvent, ReviewEvent
+from storage_consumer.core.events import AppStatsEvent, NetworkMetricEvent, ReviewEvent
 
 _NOW = datetime(2026, 9, 7, 14, tzinfo=timezone.utc)
 

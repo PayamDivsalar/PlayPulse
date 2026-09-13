@@ -10,7 +10,7 @@ from typing import Any
 import psycopg2
 from psycopg2.extras import execute_values
 
-from storage_consumer.events import RejectedRecord
+from storage_consumer.core.events import RejectedRecord
 from storage_consumer.persistence.repository import PAGE_SIZE
 
 logger = logging.getLogger(__name__)
