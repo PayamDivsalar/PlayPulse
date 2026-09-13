@@ -12,9 +12,9 @@ import threading
 import unittest
 
 from storage_consumer.config import Settings
-from storage_consumer.decoders import decode_app_stats
-from storage_consumer.pipelines import PipelineSpec, build_pipelines
-from storage_consumer.supervisor import Supervisor
+from storage_consumer.core.decoders import decode_app_stats
+from storage_consumer.messaging.pipelines import PipelineSpec, build_pipelines
+from storage_consumer.runtime.supervisor import Supervisor
 
 
 def _spec(name: str) -> PipelineSpec:

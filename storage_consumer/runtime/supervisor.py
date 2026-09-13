@@ -18,8 +18,8 @@ import threading
 from collections.abc import Callable
 
 from storage_consumer.config import Settings
-from storage_consumer.pipelines import PipelineSpec
-from storage_consumer.worker import Worker
+from storage_consumer.messaging.pipelines import PipelineSpec
+from storage_consumer.runtime.worker import Worker
 
 logger = logging.getLogger(__name__)
 

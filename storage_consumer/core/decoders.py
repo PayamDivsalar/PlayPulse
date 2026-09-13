@@ -28,7 +28,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from storage_consumer.events import AppStatsEvent, NetworkMetricEvent, ReviewEvent
+from storage_consumer.core.events import AppStatsEvent, NetworkMetricEvent, ReviewEvent
 from storage_consumer.exceptions import MessageDecodeError
 
 logger = logging.getLogger(__name__)

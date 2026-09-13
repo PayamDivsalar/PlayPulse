@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from storage_consumer.events import BoundRecord, ReviewEvent
+from storage_consumer.core.events import BoundRecord, ReviewEvent
 from storage_consumer.persistence.repository import Repository
 
 

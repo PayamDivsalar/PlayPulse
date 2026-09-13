@@ -25,16 +25,16 @@ import sys
 import threading
 
 from storage_consumer.config import PIPELINE_NAMES, Settings, load_settings
-from storage_consumer.consumer_factory import create_consumer
+from storage_consumer.messaging.consumer_factory import create_consumer
 from storage_consumer.exceptions import ConfigError, MigrationError
-from storage_consumer.heartbeat import Heartbeat
+from storage_consumer.runtime.heartbeat import Heartbeat
 from storage_consumer.persistence.application_resolver import ApplicationResolver
 from storage_consumer.persistence.database import Database
 from storage_consumer.persistence.dead_letter_repository import DeadLetterRepository
 from storage_consumer.persistence.migrator import Migrator
-from storage_consumer.pipelines import PipelineSpec, build_pipelines
-from storage_consumer.supervisor import Supervisor
-from storage_consumer.worker import Worker
+from storage_consumer.messaging.pipelines import PipelineSpec, build_pipelines
+from storage_consumer.runtime.supervisor import Supervisor
+from storage_consumer.runtime.worker import Worker
 
 logger = logging.getLogger(__name__)
 

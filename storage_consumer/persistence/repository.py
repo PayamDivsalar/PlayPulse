@@ -15,7 +15,7 @@ from typing import Any
 
 from psycopg2.extras import execute_values
 
-from storage_consumer.events import BoundRecord
+from storage_consumer.core.events import BoundRecord
 
 # How many rows go into one INSERT statement. Larger than the biggest
 # max_poll_records (500, for reviews) so a batch is normally one round trip.
