@@ -21,7 +21,7 @@ from network_analyzer.main import (
     EXIT_TRANSPORT_FAILURE,
     main,
 )
-from network_analyzer.models import Scenario
+from network_analyzer.core.models import Scenario
 from network_analyzer.tests.synthetic_pcap import (
     Capture,
     handshake,

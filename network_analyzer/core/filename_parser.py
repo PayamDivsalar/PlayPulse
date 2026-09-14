@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from network_analyzer.exceptions import FilenameConventionError
-from network_analyzer.models import CaptureDescriptor, Scenario
+from network_analyzer.core.models import CaptureDescriptor, Scenario
 
 _CAPTURE_TIMESTAMP_FORMAT = "%Y%m%dT%H%M%S"
 

@@ -2,7 +2,7 @@
 
 This is the entry point of the analysis core, and the boundary the rest of the
 subsystem depends on: give it a path, receive a
-:class:`~network_analyzer.models.NetworkMetrics`. Nothing above this line needs
+:class:`~network_analyzer.core.models.NetworkMetrics`. Nothing above this line needs
 to know that pcap files or TCP headers exist.
 """
 
@@ -14,7 +14,7 @@ from pathlib import Path
 from network_analyzer.analysis.packet_reader import read_packets
 from network_analyzer.analysis.tcp_analyzer import TcpAnalyzer, TcpMetrics
 from network_analyzer.analysis.volume_analyzer import VolumeAnalyzer, VolumeTotals
-from network_analyzer.models import NetworkMetrics
+from network_analyzer.core.models import NetworkMetrics
 
 logger = logging.getLogger(__name__)
 

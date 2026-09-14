@@ -9,7 +9,7 @@ two definitions must agree.
 Marked ``oracle`` and excluded from ordinary runs, because it needs ``tshark``
 on PATH:
 
-    pytest network_analyzer/tests/test_tshark_oracle.py -m oracle
+    pytest network_analyzer/tests/oracle/test_tshark_oracle.py -m oracle
 
 Install with ``sudo dnf install wireshark-cli`` (Fedora) or
 ``sudo apt install tshark`` (Debian/Ubuntu).

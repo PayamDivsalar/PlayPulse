@@ -9,11 +9,11 @@ from network_analyzer.exceptions import (
     PcapReadError,
     UnsupportedLinkTypeError,
 )
-from network_analyzer.filename_parser import (
+from network_analyzer.core.filename_parser import (
     build_capture_filename,
     parse_capture_filename,
 )
-from network_analyzer.models import (
+from network_analyzer.core.models import (
     AnalysisResult,
     CaptureDescriptor,
     NetworkMetrics,
@@ -21,7 +21,7 @@ from network_analyzer.models import (
     Scenario,
     TcpSegment,
 )
-from network_analyzer.retry_policy import with_retry
+from network_analyzer.common.retry_policy import with_retry
 
 __all__ = [
     "AnalysisResult",

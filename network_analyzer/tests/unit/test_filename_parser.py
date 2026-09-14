@@ -6,11 +6,11 @@ import unittest
 from datetime import datetime, timezone
 
 from network_analyzer.exceptions import FilenameConventionError
-from network_analyzer.filename_parser import (
+from network_analyzer.core.filename_parser import (
     build_capture_filename,
     parse_capture_filename,
 )
-from network_analyzer.models import Scenario
+from network_analyzer.core.models import Scenario
 
 
 class ParseCaptureFilenameTests(unittest.TestCase):

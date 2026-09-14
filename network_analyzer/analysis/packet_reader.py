@@ -3,7 +3,7 @@
 This module owns every format-specific detail of reading a capture: container
 format sniffing, link-layer dispatch, PCAPdroid trailer removal, and IP/TCP/UDP
 field extraction. Everything downstream sees a uniform stream of
-:class:`~network_analyzer.models.ParsedPacket`.
+:class:`~network_analyzer.core.models.ParsedPacket`.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from typing import Any
 import dpkt
 
 from network_analyzer.exceptions import PcapReadError, UnsupportedLinkTypeError
-from network_analyzer.models import ParsedPacket, TcpSegment
+from network_analyzer.core.models import ParsedPacket, TcpSegment
 
 logger = logging.getLogger(__name__)
 

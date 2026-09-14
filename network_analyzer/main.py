@@ -21,8 +21,8 @@ from pathlib import Path
 import requests
 from kafka.errors import KafkaError
 
-from network_analyzer.analyzer_service import AnalyzerService
-from network_analyzer.app_registry_client import AppRegistryClient
+from network_analyzer.runtime.analyzer_service import AnalyzerService
+from network_analyzer.clients.app_registry_client import AppRegistryClient
 from network_analyzer.config import Settings, load_settings
 from network_analyzer.exceptions import (
     AnalyzerConfigError,
@@ -32,8 +32,8 @@ from network_analyzer.exceptions import (
     PcapReadError,
     RegistryRequestError,
 )
-from network_analyzer.kafka_publisher import NetworkMetricsPublisher
-from network_analyzer.models import AnalysisResult, Scenario
+from network_analyzer.messaging.kafka_publisher import NetworkMetricsPublisher
+from network_analyzer.core.models import AnalysisResult, Scenario
 
 logger = logging.getLogger(__name__)
 
