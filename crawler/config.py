@@ -34,6 +34,12 @@ class Settings:
     max_concurrent_workers: int = 5
     reviews_fetch_count: int = 1000
     crawl_interval_hours: int = 1
+    # Play Store region/locale: apps flagged as Iranian are crawled with
+    # iran_country/iran_lang, everything else with default_country/default_lang.
+    default_country: str = "us"
+    default_lang: str = "en"
+    iran_country: str = "ir"
+    iran_lang: str = "fa"
     registry_request_timeout_seconds: float = 10.0
     kafka_producer_retries: int = 5
     kafka_producer_retry_backoff_ms: int = 500
@@ -67,6 +73,14 @@ class Settings:
             raise CrawlerConfigError("reviews_fetch_count must be > 0.")
         if self.crawl_interval_hours <= 0:
             raise CrawlerConfigError("crawl_interval_hours must be > 0.")
+        if not self.default_country.strip():
+            raise CrawlerConfigError("default_country must not be empty.")
+        if not self.default_lang.strip():
+            raise CrawlerConfigError("default_lang must not be empty.")
+        if not self.iran_country.strip():
+            raise CrawlerConfigError("iran_country must not be empty.")
+        if not self.iran_lang.strip():
+            raise CrawlerConfigError("iran_lang must not be empty.")
         if self.registry_request_timeout_seconds <= 0:
             raise CrawlerConfigError("registry_request_timeout_seconds must be > 0.")
         if self.kafka_producer_retries < 0:
@@ -111,6 +125,10 @@ class Settings:
         values: dict[str, object] = {
             "kafka_bootstrap_servers": "localhost:9092",
             "app_api_base_url": "http://api.local",
+            "default_country": "us",
+            "default_lang": "en",
+            "iran_country": "ir",
+            "iran_lang": "fa",
         }
         values.update(overrides)
         return cls(**values)  # type: ignore[arg-type]
@@ -171,6 +189,10 @@ def load_settings(env_file: Path | None = None) -> Settings:
         max_concurrent_workers=_env_int("CRAWLER_MAX_WORKERS", 5),
         reviews_fetch_count=_env_int("CRAWLER_REVIEWS_FETCH_COUNT", 1000),
         crawl_interval_hours=_env_int("CRAWLER_INTERVAL_HOURS", 1),
+        default_country=os.getenv("CRAWLER_DEFAULT_COUNTRY", "us") or "us",
+        default_lang=os.getenv("CRAWLER_DEFAULT_LANG", "en") or "en",
+        iran_country=os.getenv("CRAWLER_IRAN_COUNTRY", "ir") or "ir",
+        iran_lang=os.getenv("CRAWLER_IRAN_LANG", "fa") or "fa",
         kafka_producer_retries=_env_int("CRAWLER_KAFKA_PRODUCER_RETRIES", 5),
         kafka_producer_retry_backoff_ms=_env_int(
             "CRAWLER_KAFKA_PRODUCER_RETRY_BACKOFF_MS", 500

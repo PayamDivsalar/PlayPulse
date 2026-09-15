@@ -60,7 +60,9 @@ class PlayStoreClientTests(unittest.TestCase):
 
         with patch("google_play_scraper.app", return_value=raw_response) as app_mock:
             with patch("crawler.retry_policy.sleep", return_value=None):
-                result = client.get_app_details("com.example.app")
+                result = client.get_app_details(
+                    "com.example.app", country="de", lang="tr"
+                )
 
         self.assertEqual(
             result,
@@ -74,16 +76,21 @@ class PlayStoreClientTests(unittest.TestCase):
                 "adSupported": True,
             },
         )
-        self.assertEqual(app_mock.call_count, 1)
+        app_mock.assert_called_once_with(
+            "com.example.app", country="de", lang="tr"
+        )
         rate_limiter.acquire.assert_called_once()
 
     def test_get_app_details_acquires_rate_limiter_before_library_call(self) -> None:
         rate_limiter = Mock(spec=RateLimiter)
         client, _, _ = self._client(rate_limiter=rate_limiter)
 
-        def app_side_effect(package_name: str) -> dict[str, object]:
+        def app_side_effect(
+            package_name: str, *, country: str, lang: str
+        ) -> dict[str, object]:
             self.assertTrue(rate_limiter.acquire.called)
             self.assertEqual(package_name, "com.example.app")
+            self.assertEqual((country, lang), ("us", "en"))
             return {
                 "minInstalls": 1,
                 "score": 1.0,
@@ -95,7 +102,9 @@ class PlayStoreClientTests(unittest.TestCase):
             }
 
         with patch("google_play_scraper.app", side_effect=app_side_effect) as app_mock:
-            result = client.get_app_details("com.example.app")
+            result = client.get_app_details(
+                "com.example.app", country="us", lang="en"
+            )
 
         self.assertEqual(app_mock.call_count, 1)
         self.assertEqual(result["version"], "1")
@@ -109,7 +118,9 @@ class PlayStoreClientTests(unittest.TestCase):
         ) as app_mock:
             with patch("crawler.retry_policy.sleep", return_value=None):
                 with self.assertRaises(requests.ConnectionError):
-                    client.get_app_details("com.example.app")
+                    client.get_app_details(
+                        "com.example.app", country="us", lang="en"
+                    )
 
         expected_attempts = settings.retry_max_attempts + 1
         self.assertEqual(app_mock.call_count, expected_attempts)
@@ -124,7 +135,9 @@ class PlayStoreClientTests(unittest.TestCase):
         with patch("google_play_scraper.app", side_effect=PermanentError("boom")) as app_mock:
             with patch("crawler.retry_policy.sleep", return_value=None):
                 with self.assertRaises(PermanentError):
-                    client.get_app_details("com.example.app")
+                    client.get_app_details(
+                        "com.example.app", country="us", lang="en"
+                    )
 
         self.assertEqual(app_mock.call_count, 1)
         self.assertEqual(rate_limiter.acquire.call_count, 1)
@@ -153,7 +166,9 @@ class PlayStoreClientTests(unittest.TestCase):
         ]
 
         with patch("google_play_scraper.reviews", return_value=(raw_reviews, None)) as reviews_mock:
-            result = client.get_reviews("com.example.app", count=2)
+            result = client.get_reviews(
+                "com.example.app", count=2, country="ir", lang="fa"
+            )
 
         self.assertEqual(
             result,
@@ -176,7 +191,9 @@ class PlayStoreClientTests(unittest.TestCase):
                 },
             ],
         )
-        reviews_mock.assert_called_once_with("com.example.app", count=2)
+        reviews_mock.assert_called_once_with(
+            "com.example.app", count=2, country="ir", lang="fa"
+        )
         rate_limiter.acquire.assert_called_once()
 
     def test_get_reviews_normalizes_datetime_at_field(self) -> None:
@@ -193,7 +210,9 @@ class PlayStoreClientTests(unittest.TestCase):
         ]
 
         with patch("google_play_scraper.reviews", return_value=(raw_reviews, None)):
-            result = client.get_reviews("com.example.app", count=1)
+            result = client.get_reviews(
+                "com.example.app", count=1, country="us", lang="en"
+            )
 
         self.assertEqual(result[0]["at"], "2021-03-25T15:52:53")
 
@@ -221,7 +240,9 @@ class PlayStoreClientLiveTests(unittest.TestCase):
         Depends on a live Google Play Store connection. Do not run in CI.
         """
 
-        result = self._live_client().get_app_details("com.whatsapp")
+        result = self._live_client().get_app_details(
+            "com.whatsapp", country="us", lang="en"
+        )
 
         for key in _APP_DETAIL_KEYS:
             self.assertIn(key, result)
@@ -259,7 +280,9 @@ class PlayStoreClientLiveTests(unittest.TestCase):
         start = time.monotonic()
         with self.assertRaises(NotFoundError):
             self._live_client().get_app_details(
-                "this.package.definitely.does.not.exist.xyz123"
+                "this.package.definitely.does.not.exist.xyz123",
+                country="us",
+                lang="en",
             )
         elapsed = time.monotonic() - start
 
@@ -271,7 +294,9 @@ class PlayStoreClientLiveTests(unittest.TestCase):
         Depends on a live Google Play Store connection. Do not run in CI.
         """
 
-        reviews = self._live_client().get_reviews("com.whatsapp", count=5)
+        reviews = self._live_client().get_reviews(
+            "com.whatsapp", count=5, country="us", lang="en"
+        )
 
         self.assertIsInstance(reviews, list)
         self.assertGreater(len(reviews), 0)

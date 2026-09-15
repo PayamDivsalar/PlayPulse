@@ -49,7 +49,16 @@ class ApplicationServiceTestCase(TestCase):
         self.assertIsNone(app.display_name)
         self.assertIsNone(app.category)
         self.assertFalse(app.is_messaging_app)
+        self.assertFalse(app.is_iranian_app)
         self.assertTrue(app.is_active)
+
+    def test_create_application_iranian(self):
+        """Test creating an application flagged as Iranian."""
+        app = ApplicationService.create_application(
+            package_name='com.iranian.app',
+            is_iranian_app=True,
+        )
+        self.assertTrue(app.is_iranian_app)
 
     def test_create_application_duplicate_package_name(self):
         """Test that duplicate package_name raises exception before DB hit."""
@@ -227,6 +236,26 @@ class ApplicationServiceTestCase(TestCase):
         self.assertEqual(updated_app.display_name, 'Original Name')  # Unchanged
         self.assertEqual(updated_app.category, 'Games')  # Unchanged
         self.assertTrue(updated_app.is_messaging_app)  # Changed
+
+    def test_update_application_iranian_flag(self):
+        """Test updating the is_iranian_app flag."""
+        app = ApplicationService.create_application(
+            package_name='com.example.app',
+        )
+        self.assertFalse(app.is_iranian_app)
+
+        updated_app = ApplicationService.update_application(
+            app_id=app.id,
+            update_data={'is_iranian_app': True},
+        )
+        self.assertTrue(updated_app.is_iranian_app)
+
+        # And back to False
+        reverted = ApplicationService.update_application(
+            app_id=app.id,
+            update_data={'is_iranian_app': False},
+        )
+        self.assertFalse(reverted.is_iranian_app)
 
     def test_update_application_cannot_change_package_name(self):
         """Test that package_name cannot be changed (immutable key)."""

@@ -36,6 +36,10 @@ class CrawlerService:
         *,
         max_workers: int,
         reviews_fetch_count: int,
+        default_country: str = "us",
+        default_lang: str = "en",
+        iran_country: str = "ir",
+        iran_lang: str = "fa",
         cycle_reports_enabled: bool = False,
         cycle_reports_dir: str = "/data/reports",
     ) -> None:
@@ -44,6 +48,10 @@ class CrawlerService:
         self.app_registry_client = app_registry_client
         self.max_workers = max_workers
         self.reviews_fetch_count = reviews_fetch_count
+        self.default_country = default_country
+        self.default_lang = default_lang
+        self.iran_country = iran_country
+        self.iran_lang = iran_lang
         self.cycle_reports_enabled = cycle_reports_enabled
         self.cycle_reports_dir = cycle_reports_dir
 
@@ -58,11 +66,24 @@ class CrawlerService:
         if not package_name:
             raise ValueError(f"Application payload missing package name: {app!r}")
 
+        if app.get('is_iranian_app', False):
+            country, lang = self.iran_country, self.iran_lang
+        else:
+            country, lang = self.default_country, self.default_lang
+        logger.debug(
+            "Crawling package_name=%s with country=%s lang=%s",
+            package_name,
+            country,
+            lang,
+        )
+
         stats_ok = False
         reviews_ok = False
 
         try:
-            app_details = self.playstore_client.get_app_details(package_name)
+            app_details = self.playstore_client.get_app_details(
+                package_name, country=country, lang=lang
+            )
             mapped_stats = map_app_details(app_details, package_name)
             self.kafka_producer.send_app_stats(package_name, mapped_stats)
             stats_ok = True
@@ -77,6 +98,8 @@ class CrawlerService:
             reviews = self.playstore_client.get_reviews(
                 package_name,
                 count=self.reviews_fetch_count,
+                country=country,
+                lang=lang,
             )
             mapped_reviews = [map_review(review, package_name) for review in reviews]
             self.kafka_producer.send_reviews(package_name, mapped_reviews)

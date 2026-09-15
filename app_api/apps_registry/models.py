@@ -24,6 +24,11 @@ class Application(models.Model):
         default=False,
         help_text="Flags whether this app needs network (pcap) analysis"
     )
+    is_iranian_app = models.BooleanField(
+        default=False,
+        help_text="Whether this app targets the Iranian market; used by the "
+                  "crawler to select the appropriate Play Store region/locale."
+    )
     is_active = models.BooleanField(
         default=True,
         help_text="Soft-delete flag; crawler only processes active apps"

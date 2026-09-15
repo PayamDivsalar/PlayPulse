@@ -41,6 +41,7 @@ erDiagram
         string display_name "optional, filled by crawler if empty"
         string category "Play Store category"
         boolean is_messaging_app "flags network analysis need"
+        boolean is_iranian_app "flags Iranian market; selects crawl region"
         boolean is_active "soft delete flag"
         datetime created_at
         datetime updated_at
@@ -100,6 +101,13 @@ erDiagram
 </tr>
 
 <tr>
+<td><code>is_iranian_app</code></td>
+<td>Boolean</td>
+<td>Default: False</td>
+<td>مشخص می‌کند که این اپ برای بازار ایران عرضه شده است. کراولر بر اساس همین فلگ، Region/Locale مناسب برای کراول از Play Store را انتخاب می‌کند (برای اپ‌های ایرانی <code>ir/fa</code> و برای بقیه <code>us/en</code>) تا نقدهای مرتبط‌تر و واقعی‌تر کاربران همان بازار جمع‌آوری شود؛ Play Store نتایج (به‌خصوص ریویوها) را بسته به کشور و زبان درخواست‌شده تغییر می‌دهد.</td>
+</tr>
+
+<tr>
 <td><code>is_active</code></td>
 <td>Boolean</td>
 <td>Default: True</td>
@@ -137,6 +145,8 @@ erDiagram
 <li><b>Soft Delete به‌جای حذف واقعی:</b> چون سند صراحتاً واژه‌ی «غیرفعال کردن» را برای عملیات Delete به‌کار برده، حذف فیزیکی رکورد صحیح نیست؛ داده‌های تاریخی مرتبط با اپ (ریویوها، آمار قبلی) باید حتی پس از غیرفعال شدن اپ در پایگاه‌داده باقی بمانند.</li>
 <br>
 <li><b>package_name به‌جای id به‌عنوان کلید ارجاع بین‌سیستمی:</b> از آنجا که کراولر و زیرسیستم شبکه به‌صورت مستقل با اپ‌ها کار می‌کنند، استفاده از یک شناسه‌ی معنادار و پایدار (package_name) به‌جای کلید داخلی auto-increment، افزونگی و خطای انسانی در تطبیق داده را کاهش می‌دهد.</li>
+<br>
+<li><b>افزودن فلگ is_iranian_app برای انتخاب Region کراول:</b> محتوای Play Store (به‌ویژه ریویوها) بسته به کشور و زبان درخواست متفاوت است؛ برای یک اپ ایرانی، کراول با پیش‌فرض <code>us/en</code> عمدتاً نقدهای کاربران غیرایرانی را برمی‌گرداند که برای تحلیل این پروژه کم‌ارزش است. با این فلگ Boolean ساده (همان الگوی is_messaging_app)، کراولر برای اپ‌های ایرانی از <code>ir/fa</code> و برای بقیه از <code>us/en</code> استفاده می‌کند تا نقدهای مرتبط‌تر با بازار هدف جمع‌آوری شود. مقادیر منطقه‌ای در تنظیمات کراولر قابل تغییر است و این فیلد صرفاً انتخاب بین دو حالت را مشخص می‌کند.</li>
 </ul>
 </font>
 </p>

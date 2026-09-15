@@ -50,6 +50,10 @@ def main() -> int:
         app_registry_client=app_registry_client,
         max_workers=settings.max_concurrent_workers,
         reviews_fetch_count=settings.reviews_fetch_count,
+        default_country=settings.default_country,
+        default_lang=settings.default_lang,
+        iran_country=settings.iran_country,
+        iran_lang=settings.iran_lang,
         cycle_reports_enabled=settings.cycle_reports_enabled,
         cycle_reports_dir=settings.cycle_reports_dir,
     )

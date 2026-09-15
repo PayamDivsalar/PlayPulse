@@ -134,6 +134,9 @@ class ApplicationListCreateView(generics.ListCreateAPIView):
             is_messaging_app=serializer.validated_data.get(
                 'is_messaging_app', False
             ),
+            is_iranian_app=serializer.validated_data.get(
+                'is_iranian_app', False
+            ),
         )
         return Response(
             ApplicationSerializer(application).data,

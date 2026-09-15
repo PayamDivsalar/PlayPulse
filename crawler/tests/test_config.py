@@ -14,6 +14,24 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.retry_max_attempts, 3)
         self.assertEqual(settings.reviews_fetch_count, 1000)
 
+    def test_region_defaults(self) -> None:
+        settings = Settings.for_testing()
+        self.assertEqual(settings.default_country, "us")
+        self.assertEqual(settings.default_lang, "en")
+        self.assertEqual(settings.iran_country, "ir")
+        self.assertEqual(settings.iran_lang, "fa")
+
+    def test_rejects_empty_region_values(self) -> None:
+        for field in (
+            "default_country",
+            "default_lang",
+            "iran_country",
+            "iran_lang",
+        ):
+            with self.subTest(field=field):
+                with self.assertRaises(CrawlerConfigError):
+                    Settings.for_testing(**{field: "   "})
+
     def test_rejects_non_positive_workers(self) -> None:
         with self.assertRaises(CrawlerConfigError):
             Settings.for_testing(max_concurrent_workers=0)
