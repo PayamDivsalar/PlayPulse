@@ -3,7 +3,8 @@
 # =============================================================================
 # check_infra.sh
 #
-# اسکریپت Smoke Test برای بررسی سلامت زیرساخت پایه‌ی پروژه (Postgres و Kafka)
+# اسکریپت Smoke Test برای بررسی سلامت زیرساخت پایه‌ی پروژه (Postgres و Kafka
+# و Metabase)
 #
 # این اسکریپت هیچ فرضی درباره‌ی صحت داده نمی‌کند؛ فقط بررسی می‌کند که سرویس‌ها
 # بالا آمده‌اند، در دسترس هستند، و می‌توان به آن‌ها متصل شد و روی آن‌ها عملیات
@@ -75,6 +76,7 @@ fi
 
 POSTGRES_CONTAINER="project_postgres"
 KAFKA_CONTAINER="project_kafka"
+METABASE_CONTAINER="project_metabase"
 TEST_TOPIC="infra-smoke-test"
 TEST_MESSAGE="hello-from-check-infra-$(date +%s)"
 
@@ -194,6 +196,27 @@ docker exec "$KAFKA_CONTAINER" kafka-topics \
     --bootstrap-server localhost:9092 \
     --delete --topic "$TEST_TOPIC" >/dev/null 2>&1
 print_ok "پاکسازی انجام شد."
+
+# =============================================================================
+# بخش ۳: بررسی Metabase
+# =============================================================================
+print_header "Metabase"
+
+if container_is_running "$METABASE_CONTAINER"; then
+    print_ok "کانتینر $METABASE_CONTAINER در حال اجراست."
+else
+    print_fail "کانتینر $METABASE_CONTAINER در حال اجرا نیست."
+fi
+
+print_info "در حال بررسی سلامت Metabase (GET /api/health)..."
+METABASE_HEALTH=$(docker exec "$METABASE_CONTAINER" curl -fsS http://localhost:3000/api/health 2>&1)
+
+if echo "$METABASE_HEALTH" | grep -q '"status":"ok"'; then
+    print_ok "Metabase سالم است و به درخواست‌ها پاسخ می‌دهد."
+else
+    print_fail "پاسخ /api/health سالم نیست (یا در دسترس نیست)."
+    echo "      دریافت شد: $METABASE_HEALTH"
+fi
 
 # =============================================================================
 # جمع‌بندی نهایی

@@ -2,6 +2,13 @@ version: "3.8"
 
 services:
 
+  # The ./postgres/init mount only takes effect on a completely empty
+  # postgres_data volume: the official postgres image runs
+  # /docker-entrypoint-initdb.d exactly once, on the first startup with an
+  # empty data directory (documented image behavior). On an existing volume
+  # (e.g. a server deployed before this mount existed) the scripts are
+  # skipped, which is why scripts/bring_up.sh also creates metabase_app_db
+  # idempotently on every bring-up.
   postgres:
     image: postgres:16
     container_name: project_postgres
@@ -14,6 +21,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
     networks:
       - project_network
     healthcheck:
@@ -269,6 +277,37 @@ services:
       - ./data/reports:/data/reports
     networks:
       - project_network
+
+  # Metabase is a tool for data visualization and reporting.
+  # It is used to create dashboards and reports from the data stored in the database.
+  metabase:
+    image: metabase/metabase:v0.50.20
+    container_name: project_metabase
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${METABASE_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/health"]
+      # JVM cold start plus first-boot Liquibase migrations against
+      # metabase_app_db can take a while; start_period keeps those seconds
+      # from counting against the retry budget.
+      interval: 15s
+      timeout: 10s
+      start_period: 180s
+      retries: 5
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase_app_db
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${POSTGRES_USER}
+      MB_DB_PASS: ${POSTGRES_PASSWORD}
+      MB_DB_HOST: postgres
+    networks:
+      - project_network
+
 
 networks:
   project_network:

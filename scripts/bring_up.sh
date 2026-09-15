@@ -16,7 +16,9 @@
 #   4. Mirrors those credentials into host-side app_api / storage_consumer envs
 #   5. Starts the Compose stack (infra + app-api + storage-consumer + crawler
 #      + network-analyzer via Compose profile ``tools``)
-#   6. Waits for Postgres / Kafka / app-api / storage-consumer
+#   6. Waits for Postgres / Kafka / app-api / storage-consumer and ensures
+#      metabase_app_db exists (idempotent; covers volumes created before
+#      postgres/init/ existed)
 #   7. Runs scripts/infra/check_infra.sh
 #
 # What it does not do:
@@ -54,7 +56,12 @@ SKIP_CHECK=false
 NO_BUILD=false
 WITH_CYCLE_REPORTS=false
 
-INFRA_SERVICES=(postgres zookeeper kafka kafka-init kafka-ui)
+# Infra services (also the --infra-only set): the data plane plus auxiliary
+# tooling. Metabase belongs here, not in APP_SERVICES: like kafka-ui it is a
+# dashboard/ops tool rather than a PlayPulse subsystem, it only needs a
+# healthy Postgres (compose enforces that via depends_on), and it is equally
+# useful in --infra-only host/venv development.
+INFRA_SERVICES=(postgres zookeeper kafka kafka-init kafka-ui metabase)
 # network-analyzer lives behind Compose profile ``tools``; bring_up enables
 # that profile when starting the full stack (see Compose up below).
 APP_SERVICES=(app-api storage-consumer crawler network-analyzer)
@@ -64,6 +71,7 @@ KAFKA_CONTAINER="project_kafka"
 APP_API_CONTAINER="project_app_api"
 CONSUMER_CONTAINER="project_storage_consumer"
 ANALYZER_CONTAINER="project_network_analyzer"
+METABASE_CONTAINER="project_metabase"
 
 # --- Helpers -----------------------------------------------------------------
 
@@ -92,7 +100,8 @@ Usage:
   ./scripts/bring_up.sh [options]
 
 Options:
-  --infra-only          Start only Postgres, Zookeeper, Kafka, kafka-init, Kafka UI
+  --infra-only          Start only Postgres, Zookeeper, Kafka, kafka-init, Kafka UI,
+                        Metabase (broker + database + tooling)
   --skip-check          Skip scripts/infra/check_infra.sh after startup
   --no-build            Pass --no-build to docker compose up (reuse existing images)
   --with-cycle-reports  Enable crawl+persist cycle reports
@@ -342,6 +351,17 @@ wait_postgres() {
     return 0
 }
 
+wait_metabase() {
+    local retries=90
+    print_info "Waiting for Metabase health ($METABASE_CONTAINER)..."
+    until [[ "$(docker inspect -f '{{.State.Health.Status}}' "$METABASE_CONTAINER" 2>/dev/null || echo starting)" == "healthy" ]]; do
+        retries=$((retries - 1))
+        [[ $retries -gt 0 ]] || return 1
+        sleep 2
+    done
+    return 0
+}
+
 wait_kafka() {
     local retries=45
     print_info "Waiting for Kafka ($KAFKA_CONTAINER)..."
@@ -394,6 +414,33 @@ if wait_postgres; then
     print_ok "Postgres is accepting connections."
 else
     die "Postgres did not become ready in time. Check: docker compose logs postgres"
+fi
+
+# Metabase's dedicated application database. On a fresh volume the init
+# script (postgres/init/01-create-metabase-db.sh) already created it during
+# the container's first startup; this step covers volumes that predate that
+# script (e.g. a server where the DB was created manually). CREATE DATABASE
+# has no IF NOT EXISTS, so check existence first -- the step is idempotent.
+if docker exec "$POSTGRES_CONTAINER" psql -U "$user" -d "$db" -tc \
+    "SELECT 1 FROM pg_database WHERE datname = 'metabase_app_db'" | grep -q 1; then
+    print_ok "metabase_app_db already exists."
+else
+    if docker exec "$POSTGRES_CONTAINER" psql -U "$user" -d "$db" -c \
+        "CREATE DATABASE metabase_app_db;"; then
+        print_ok "Created metabase_app_db for Metabase."
+    else
+        die "Failed to create metabase_app_db. Check: docker compose logs postgres"
+    fi
+fi
+
+# Wait for Metabase itself. This must come after the metabase_app_db step:
+# Metabase runs its first-boot migrations against that database and cannot
+# report healthy before it exists. The first start can take a couple of
+# minutes (JVM + Liquibase); the generous retry budget matches that.
+if wait_metabase; then
+    print_ok "Metabase is healthy."
+else
+    print_info "Metabase did not become healthy in time. Check: docker compose logs metabase"
 fi
 
 if wait_kafka; then
