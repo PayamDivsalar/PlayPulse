@@ -58,12 +58,49 @@ class CrawlerServiceTests(unittest.TestCase):
         self.assertEqual(kafka.send_reviews.call_count, 3)
         for _args, kwargs in playstore.get_reviews.call_args_list:
             self.assertEqual(kwargs.get("count"), settings.reviews_fetch_count)
+        for call in playstore.get_app_details.call_args_list:
+            self.assertEqual(call.kwargs.get("country"), "us")
+            self.assertEqual(call.kwargs.get("lang"), "en")
+        for _args, kwargs in playstore.get_reviews.call_args_list:
+            self.assertEqual(kwargs.get("country"), "us")
+            self.assertEqual(kwargs.get("lang"), "en")
 
         for call in kafka.send_app_stats.call_args_list:
             package_name, payload = call.args
             self.assertEqual(payload["package_name"], package_name)
             self.assertIn("crawled_at", payload)
             self.assertIn("reviews_count", payload)
+
+    def test_iranian_apps_use_iran_region_others_use_default(self) -> None:
+        apps = [
+            {"package_name": "com.iranian", "is_iranian_app": True},
+            {"package_name": "com.global", "is_iranian_app": False},
+            {"package_name": "com.legacy"},  # key missing -> default region
+        ]
+        service, playstore, kafka, _, _ = self._build_service(apps)
+        playstore.get_app_details.return_value = {"score": 4.5}
+
+        service.run_crawl_cycle()
+
+        regions_by_package = {
+            call.args[0]: (call.kwargs.get("country"), call.kwargs.get("lang"))
+            for call in playstore.get_app_details.call_args_list
+        }
+        self.assertEqual(
+            regions_by_package,
+            {
+                "com.iranian": ("ir", "fa"),
+                "com.global": ("us", "en"),
+                "com.legacy": ("us", "en"),
+            },
+        )
+        for call in playstore.get_reviews.call_args_list:
+            expected = (
+                ("ir", "fa") if call.args[0] == "com.iranian" else ("us", "en")
+            )
+            self.assertEqual(
+                (call.kwargs.get("country"), call.kwargs.get("lang")), expected
+            )
 
     def test_one_failing_app_does_not_stop_the_others(self) -> None:
         apps = [
@@ -73,7 +110,7 @@ class CrawlerServiceTests(unittest.TestCase):
         ]
         service, playstore, kafka, _, _ = self._build_service(apps)
 
-        def details(package_name: str) -> dict:
+        def details(package_name: str, *, country: str, lang: str) -> dict:
             if package_name == "com.b":
                 raise RuntimeError("play store failed")
             return {"score": 4.5}

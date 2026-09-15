@@ -49,7 +49,6 @@ class PlayStoreClient:
 
     def __init__(self, rate_limiter: RateLimiter, settings: Settings) -> None:
         self.rate_limiter = rate_limiter
-        self._default_reviews_count = settings.reviews_fetch_count
         # Bind retry wrappers at construction time from injected settings
         # (not at import time / per call), so tests can vary attempts per
         # instance without rebuilding decorators on every request.
@@ -65,8 +64,15 @@ class PlayStoreClient:
             self._get_reviews_once
         )
 
-    def get_app_details(self, package_name: str) -> dict[str, Any]:
+    def get_app_details(
+        self, package_name: str, country: str, lang: str
+    ) -> dict[str, Any]:
         """Return a filtered subset of app details for a package.
+
+        Args:
+            package_name: Play Store package identifier.
+            country: Two-letter Play Store country code (e.g. "us", "ir").
+            lang: Two-letter Play Store language code (e.g. "en", "fa").
 
         Raises:
             NotFoundError: if the package does not exist on the Play Store
@@ -75,12 +81,16 @@ class PlayStoreClient:
                 after retries are exhausted.
         """
 
-        return self._get_app_details_with_retry(package_name)
+        return self._get_app_details_with_retry(package_name, country, lang)
 
-    def _get_app_details_once(self, package_name: str) -> dict[str, Any]:
+    def _get_app_details_once(
+        self, package_name: str, country: str, lang: str
+    ) -> dict[str, Any]:
         self.rate_limiter.acquire()
         try:
-            raw = google_play_scraper.app(package_name)
+            raw = google_play_scraper.app(
+                package_name, country=country, lang=lang
+            )
         except NotFoundError:
             logger.warning("Package not found on Play Store: %s", package_name)
             raise
@@ -94,9 +104,17 @@ class PlayStoreClient:
     def get_reviews(
         self,
         package_name: str,
-        count: int | None = None,
+        count: int,
+        country: str,
+        lang: str,
     ) -> list[dict[str, Any]]:
         """Return the most recent reviews for a package as plain dicts.
+
+        Args:
+            package_name: Play Store package identifier.
+            count: Exact number of reviews to fetch.
+            country: Two-letter Play Store country code (e.g. "us", "ir").
+            lang: Two-letter Play Store language code (e.g. "en", "fa").
 
         Raises:
             NotFoundError: if the package does not exist on the Play Store
@@ -105,17 +123,20 @@ class PlayStoreClient:
                 after retries are exhausted.
         """
 
-        fetch_count = self._default_reviews_count if count is None else count
-        return self._get_reviews_with_retry(package_name, fetch_count)
+        return self._get_reviews_with_retry(package_name, count, country, lang)
 
     def _get_reviews_once(
         self,
         package_name: str,
         count: int,
+        country: str,
+        lang: str,
     ) -> list[dict[str, Any]]:
         self.rate_limiter.acquire()
         try:
-            raw_reviews, _ = google_play_scraper.reviews(package_name, count=count)
+            raw_reviews, _ = google_play_scraper.reviews(
+                package_name, count=count, country=country, lang=lang
+            )
         except NotFoundError:
             logger.warning("Package not found on Play Store: %s", package_name)
             raise
