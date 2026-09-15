@@ -119,6 +119,30 @@ class ApplicationListCreateViewTestCase(APITestCase):
         self.assertEqual(response.data['package_name'], 'com.minimal.test')
         self.assertIsNone(response.data['display_name'])
 
+    def test_create_application_iranian(self):
+        """Test creating an application with is_iranian_app=true via POST."""
+        payload = {
+            'package_name': 'com.iranian.test',
+            'is_iranian_app': True,
+        }
+        response = self.client.post(self.list_url, payload, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.data['is_iranian_app'])
+        # Persisted correctly
+        app = ApplicationService.get_application_by_package_name(
+            'com.iranian.test'
+        )
+        self.assertTrue(app.is_iranian_app)
+
+    def test_create_application_iranian_defaults_to_false(self):
+        """POST without is_iranian_app defaults it to False."""
+        payload = {'package_name': 'com.notiranian.test'}
+        response = self.client.post(self.list_url, payload, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(response.data['is_iranian_app'])
+
     def test_create_application_duplicate_package_name(self):
         """Test that duplicate package_name returns an error (409 or 400)."""
         payload = {'package_name': 'com.app1.test'}
@@ -168,6 +192,7 @@ class ApplicationListCreateViewTestCase(APITestCase):
         self.assertEqual(data['display_name'], 'Complete App')
         self.assertEqual(data['category'], 'Games')
         self.assertTrue(data['is_messaging_app'])
+        self.assertIn('is_iranian_app', data)
         self.assertTrue(data['is_active'])
         self.assertIn('id', data)
         self.assertIn('created_at', data)
@@ -237,6 +262,17 @@ class ApplicationDetailViewTestCase(APITestCase):
         # Other fields should be unchanged
         self.assertEqual(response.data['category'], 'Games')
         self.assertFalse(response.data['is_messaging_app'])
+
+    def test_update_application_iranian_flag(self):
+        """PATCH can flip is_iranian_app on an existing application."""
+        payload = {'is_iranian_app': True}
+        response = self.client.patch(self.detail_url, payload, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['is_iranian_app'])
+        # Persisted
+        app = ApplicationService.get_application(app_id=self.app.id)
+        self.assertTrue(app.is_iranian_app)
 
     def test_update_application_not_found(self):
         """Test that updating non-existent app returns 404."""

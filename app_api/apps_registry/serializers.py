@@ -26,6 +26,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'display_name',
             'category',
             'is_messaging_app',
+            'is_iranian_app',
             'is_active',
             'created_at',
             'updated_at',

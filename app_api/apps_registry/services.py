@@ -36,6 +36,7 @@ class ApplicationService:
         display_name: Optional[str] = None,
         category: Optional[str] = None,
         is_messaging_app: bool = False,
+        is_iranian_app: bool = False,
     ) -> Application:
         """
         Create a new application in the registry.
@@ -51,6 +52,7 @@ class ApplicationService:
             display_name: Human-readable app name (optional, can be auto-filled)
             category: Play Store category (optional)
             is_messaging_app: Flag for network analysis requirement
+            is_iranian_app: Flag for crawling with the Iranian region/locale
             
         Returns:
             The created Application instance
@@ -84,6 +86,7 @@ class ApplicationService:
                 display_name=display_name,
                 category=category,
                 is_messaging_app=is_messaging_app,
+                is_iranian_app=is_iranian_app,
                 is_active=True,  # Always create as active
             )
             return application
@@ -182,7 +185,7 @@ class ApplicationService:
         
         Business rules:
         - Cannot change package_name (immutable key)
-        - Can update: display_name, category, is_messaging_app, is_active
+        - Can update: display_name, category, is_messaging_app, is_iranian_app, is_active
         - Use deactivate_application() instead of setting is_active=False for clarity
         
         Args:
@@ -215,6 +218,7 @@ class ApplicationService:
             'display_name',
             'category',
             'is_messaging_app',
+            'is_iranian_app',
             'is_active',
         }
 

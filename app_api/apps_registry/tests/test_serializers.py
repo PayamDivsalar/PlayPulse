@@ -36,6 +36,25 @@ class ApplicationSerializerTestCase(TestCase):
         self.assertTrue(serializer.is_valid())
         self.assertIsNone(serializer.validated_data.get('display_name'))
 
+    def test_is_iranian_app_deserializes_true(self):
+        """is_iranian_app=True is accepted and lands in validated data."""
+        data = {
+            'package_name': 'com.example.app',
+            'is_iranian_app': True,
+        }
+        serializer = ApplicationSerializer(data=data)
+        self.assertTrue(serializer.is_valid())
+        self.assertTrue(serializer.validated_data['is_iranian_app'])
+
+    def test_is_iranian_app_defaults_to_false(self):
+        """When omitted, is_iranian_app defaults to False."""
+        data = {
+            'package_name': 'com.example.app',
+        }
+        serializer = ApplicationSerializer(data=data)
+        self.assertTrue(serializer.is_valid())
+        self.assertFalse(serializer.validated_data.get('is_iranian_app', False))
+
     def test_package_name_validation_empty_string(self):
         """Package name cannot be empty."""
         data = {'package_name': ''}
@@ -157,6 +176,7 @@ class ApplicationSerializerTestCase(TestCase):
         self.assertIn('display_name', data)
         self.assertIn('category', data)
         self.assertIn('is_messaging_app', data)
+        self.assertIn('is_iranian_app', data)
         self.assertIn('is_active', data)
         self.assertIn('created_at', data)
         self.assertIn('updated_at', data)
@@ -165,4 +185,5 @@ class ApplicationSerializerTestCase(TestCase):
         self.assertEqual(data['package_name'], 'com.test.app')
         self.assertEqual(data['display_name'], 'Test App')
         self.assertTrue(data['is_messaging_app'])
+        self.assertFalse(data['is_iranian_app'])  # Model default
         self.assertTrue(data['is_active'])
