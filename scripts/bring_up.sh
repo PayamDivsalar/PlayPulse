@@ -16,7 +16,9 @@
 #   4. Mirrors those credentials into host-side app_api / storage_consumer envs
 #   5. Starts the Compose stack (infra + app-api + storage-consumer + crawler
 #      + network-analyzer via Compose profile ``tools``)
-#   6. Waits for Postgres / Kafka / app-api / storage-consumer
+#   6. Waits for Postgres / Kafka / app-api / storage-consumer and ensures
+#      metabase_app_db exists (idempotent; covers volumes created before
+#      postgres/init/ existed)
 #   7. Runs scripts/infra/check_infra.sh
 #
 # What it does not do:
@@ -394,6 +396,23 @@ if wait_postgres; then
     print_ok "Postgres is accepting connections."
 else
     die "Postgres did not become ready in time. Check: docker compose logs postgres"
+fi
+
+# Metabase's dedicated application database. On a fresh volume the init
+# script (postgres/init/01-create-metabase-db.sh) already created it during
+# the container's first startup; this step covers volumes that predate that
+# script (e.g. a server where the DB was created manually). CREATE DATABASE
+# has no IF NOT EXISTS, so check existence first -- the step is idempotent.
+if docker exec "$POSTGRES_CONTAINER" psql -U "$user" -d "$db" -tc \
+    "SELECT 1 FROM pg_database WHERE datname = 'metabase_app_db'" | grep -q 1; then
+    print_ok "metabase_app_db already exists."
+else
+    if docker exec "$POSTGRES_CONTAINER" psql -U "$user" -d "$db" -c \
+        "CREATE DATABASE metabase_app_db;"; then
+        print_ok "Created metabase_app_db for Metabase."
+    else
+        die "Failed to create metabase_app_db. Check: docker compose logs postgres"
+    fi
 fi
 
 if wait_kafka; then
