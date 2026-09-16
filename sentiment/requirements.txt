@@ -1,0 +1,11 @@
+# Runtime deps for the sentiment batch job.
+#
+# torch: install the CPU wheel explicitly so pip does not pull the multi-GB
+# CUDA build from PyPI. In Docker this is done via --index-url (see Dockerfile).
+# Locally:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements.txt
+transformers>=4.36.0
+psycopg2-binary>=2.9.9
+python-dotenv>=1.0.0
+pytest>=8.0.0
