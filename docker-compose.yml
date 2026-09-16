@@ -246,6 +246,33 @@ services:
     networks:
       - project_network
 
+  sentiment:
+    # Batch/CLI job that fills reviews.sentiment. Behind profile tools so
+    # `docker compose up` never starts it (same pattern as network-analyzer).
+    #
+    #   docker compose --profile tools build sentiment
+    #   docker compose run --rm sentiment run
+    #   docker compose run --rm sentiment run --batch-size 50 --dry-run
+    build: ./sentiment
+    container_name: project_sentiment
+    profiles:
+      - tools
+    depends_on:
+      postgres:
+        condition: service_healthy
+      storage-consumer:
+        condition: service_healthy
+    environment:
+      # Docker-network addresses — intentionally NOT from sentiment/.env
+      # (that file is for host/venv: 127.0.0.1). See docs/setup.md.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      - project_network
+
   # Not a subsystem: same storage-consumer image (already has kafka-python +
   # psycopg2), overrides the entrypoint to run one mounted script in a loop.
   # Started only via: ./scripts/bring_up.sh --with-cycle-reports
