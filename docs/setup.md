@@ -30,30 +30,36 @@ project-root/
   storage_consumer/.env  # فقط اجرای venv مصرف‌کننده‌ی استوریج
                        #   KAFKA_BOOTSTRAP_SERVERS=localhost:9092
                        #   POSTGRES_HOST=127.0.0.1
+  sentiment/.env       # فقط اجرای venv جاب sentiment روی host
+                       #   POSTGRES_HOST=127.0.0.1
 ```
 
 نمونه‌ها: `.env.example` در ریشه، `crawler/.env.example`،
 `app_api/.env.example`، `network_analyzer/.env.example`،
-`storage_consumer/.env.example`.
+`storage_consumer/.env.example`، `sentiment/.env.example`.
 
 `storage_consumer` تنها زیرسیستمی است که **هم** به Kafka و **هم** به
 PostgreSQL وصل می‌شود، پس هر دو دسته آدرس را دارد و همین آن را به بهترین
 مثال این تفکیک تبدیل می‌کند: روی host مقدار `localhost:9092` و
 `127.0.0.1` و داخل compose مقدار `kafka:29092` و `postgres`.
 
-نام متغیرهای `POSTGRES_*` عیناً همان‌های `app_api` هستند؛ این عمدی است چون
-هر دو به یک دیتابیس وصل می‌شوند. مالکیت جدول‌ها اما تفکیک‌شده است:
-جنگو مالک `applications` است و `storage_consumer` مالک چهار جدول خودش
-(برای جزئیات: `storage_consumer/README.md`).
+`sentiment` فقط به PostgreSQL وصل می‌شود (بدون Kafka) و ستون
+`reviews.sentiment` را می‌نویسد.
+
+نام متغیرهای `POSTGRES_*` عیناً همان‌های `app_api` / `storage_consumer`
+هستند؛ این عمدی است چون همه به یک دیتابیس وصل می‌شوند. مالکیت جدول‌ها اما
+تفکیک‌شده است: جنگو مالک `applications` است و `storage_consumer` مالک چهار
+جدول خودش (برای جزئیات: `storage_consumer/README.md`). ستون
+`reviews.sentiment` را فقط جاب `sentiment` مقداردهی می‌کند.
 
 ## Docker چطور override می‌کند؟
 
-برای سرویس‌های `app-api`، `crawler` و `storage-consumer`، مقادیر مخصوص
-کانتینر **مستقیم** در `docker-compose.yml` → `environment:` تعریف شده‌اند
-(مثلاً `POSTGRES_HOST: postgres`، `KAFKA_BOOTSTRAP_SERVERS: kafka:29092`،
-`APP_API_BASE_URL: http://app-api:8000`). از `env_file: */.env` استفاده
-**نمی‌کنیم**، چون همان فایل برای host است و hostname اشتباه به کانتینر
-می‌دهد.
+برای سرویس‌های `app-api`، `crawler`، `storage-consumer`، `network-analyzer`
+و `sentiment`، مقادیر مخصوص کانتینر **مستقیم** در `docker-compose.yml` →
+`environment:` تعریف شده‌اند (مثلاً `POSTGRES_HOST: postgres`،
+`KAFKA_BOOTSTRAP_SERVERS: kafka:29092`، `APP_API_BASE_URL: http://app-api:8000`).
+از `env_file: */.env` استفاده **نمی‌کنیم**، چون همان فایل برای host است و
+hostname اشتباه به کانتینر می‌دهد.
 
 `python-dotenv` متغیرهایی را که از قبل در محیط process ست شده‌اند
 بازنویسی نمی‌کند؛ پس داخل کانتینر، مقادیر compose مقدم‌اند.
@@ -87,6 +93,44 @@ python -m crawler.main
 ```bash
 docker compose up -d --build crawler
 ```
+
+## جاب‌های on-demand (پروفایل `tools`)
+
+دو سرویس پشت پروفایل composeی `tools` هستند تا `docker compose up` آن‌ها را
+خودکار بالا نیاورد — هر دو جاب دسته‌ای/CLIاند، نه daemon:
+
+| سرویس | نقش | اتصال |
+|---|---|---|
+| `network-analyzer` | تحلیل pcap → Kafka topic `network-metrics` | Kafka + App API |
+| `sentiment` | طبقه‌بندی متن نقد → ستون `reviews.sentiment` | فقط PostgreSQL |
+
+روی host، فایل‌های `network_analyzer/.env` و `sentiment/.env` فقط برای
+اجرای venvاند (`127.0.0.1` / `localhost`). داخل کانتینر، hostnameها از
+`environment:` در compose می‌آیند (`postgres`، `kafka:29092`، …).
+
+### sentiment
+
+```bash
+cp sentiment/.env.example sentiment/.env
+# POSTGRES_* را مثل storage_consumer/.env پر کنید (روی host: POSTGRES_HOST=127.0.0.1)
+```
+
+اجرا از **ریشهٔ مخزن** (نه از داخل `sentiment/`):
+
+```bash
+python -m sentiment.main run
+python -m sentiment.main run --batch-size 50 --dry-run
+```
+
+در Docker:
+
+```bash
+docker compose --profile tools build sentiment
+docker compose run --rm sentiment run
+docker compose run --rm sentiment run --batch-size 50 --dry-run
+```
+
+جزئیات مدل و محدودیت فارسی: `sentiment/README.md`.
 
 ## Metabase
 
