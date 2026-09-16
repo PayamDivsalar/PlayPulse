@@ -257,11 +257,6 @@ services:
     container_name: project_sentiment
     profiles:
       - tools
-    depends_on:
-      postgres:
-        condition: service_healthy
-      storage-consumer:
-        condition: service_healthy
     environment:
       # Docker-network addresses — intentionally NOT from sentiment/.env
       # (that file is for host/venv: 127.0.0.1). See docs/setup.md.
@@ -302,6 +297,145 @@ services:
     volumes:
       - ./scripts/reports/finalize_cycle_reports.py:/scripts/reports/finalize_cycle_reports.py:ro
       - ./data/reports:/data/reports
+    networks:
+      - project_network
+
+  # ---------------------------------------------------------------------------
+  # Test runners (profile ``test`` only). Never started by plain `up` or the
+  # ``tools`` profile. Images that strip tests/ in the Dockerfile remount them
+  # from the host; pytest.ini supplies the live/oracle/integration markers.
+  # ---------------------------------------------------------------------------
+
+  crawler-tests:
+    build: ./crawler
+    profiles: ["test"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      app-api:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      APP_API_BASE_URL: http://app-api:8000
+      CRAWLER_CYCLE_REPORTS_ENABLED: ${CRAWLER_CYCLE_REPORTS_ENABLED:-false}
+      CRAWLER_CYCLE_REPORTS_DIR: ${CRAWLER_CYCLE_REPORTS_DIR:-/data/reports}
+    volumes:
+      - ./pytest.ini:/app/pytest.ini:ro
+    entrypoint: ["pytest"]
+    command: ["crawler/tests/", "-v", "-m", "not live"]
+    networks:
+      - project_network
+
+  network-analyzer-tests:
+    build:
+      context: .
+      dockerfile: network_analyzer/Dockerfile
+    profiles: ["test"]
+    depends_on:
+      kafka:
+        condition: service_started
+      app-api:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      APP_API_BASE_URL: http://app-api:8000
+      ANALYZER_PCAP_ROOT: /data/pcap
+    volumes:
+      - ./network_analyzer/tests:/app/network_analyzer/tests:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+    entrypoint: ["pytest"]
+    command: ["network_analyzer/tests/", "-v", "-m", "not live and not oracle"]
+    networks:
+      - project_network
+
+  storage-consumer-tests:
+    build: ./storage_consumer
+    profiles: ["test"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      app-api:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      STORAGE_PIPELINES: ${STORAGE_PIPELINES:-all}
+    volumes:
+      - ./storage_consumer/tests:/app/storage_consumer/tests:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+    entrypoint: ["pytest"]
+    command: ["storage_consumer/tests/unit", "storage_consumer/tests/contract", "-v"]
+    networks:
+      - project_network
+
+  storage-consumer-tests-integration:
+    build: ./storage_consumer
+    profiles: ["test"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      app-api:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      STORAGE_PIPELINES: ${STORAGE_PIPELINES:-all}
+    volumes:
+      - ./storage_consumer/tests:/app/storage_consumer/tests:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+    entrypoint: ["pytest"]
+    command: ["storage_consumer/tests/integration", "-v", "-m", "integration"]
+    networks:
+      - project_network
+
+  sentiment-tests:
+    build: ./sentiment
+    profiles: ["test"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./sentiment/tests:/app/sentiment/tests:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+    entrypoint: ["pytest"]
+    command: ["sentiment/tests/unit", "-v"]
+    networks:
+      - project_network
+
+  app-api-tests:
+    build: ./app_api
+    profiles: ["test"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,host.docker.internal,app-api}
+    command: ["test", "apps_registry", "-v", "2"]
     networks:
       - project_network
 

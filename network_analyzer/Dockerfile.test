@@ -1,0 +1,36 @@
+# Test-only image for network-analyzer oracle suites (-m oracle).
+# Adds tshark; the production Dockerfile deliberately does not.
+#
+#   docker compose --profile test build network-analyzer-tests-oracle
+#
+# Build context is the repository root (same as network_analyzer/Dockerfile).
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Noninteractive: wireshark-common otherwise prompts about dumpcap setuid.
+RUN apt-get update \
+    && echo 'wireshark-common wireshark-common/install-setuid boolean false' \
+        | debconf-set-selections \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        tshark \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY network_analyzer/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY network_analyzer/ /app/network_analyzer/
+
+# Keep tests in this image (production Dockerfile strips them).
+RUN rm -rf /app/network_analyzer/venv \
+       /app/network_analyzer/.env \
+       /app/network_analyzer/.env.example \
+       /app/network_analyzer/Dockerfile \
+       /app/network_analyzer/Dockerfile.test \
+       /app/network_analyzer/.dockerignore \
+       /app/network_analyzer/docker-entrypoint.sh
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV ANALYZER_PCAP_ROOT=/data/pcap

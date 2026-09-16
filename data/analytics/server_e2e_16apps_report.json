@@ -1,0 +1,43 @@
+{
+  "started_at": "2026-09-10T21:38:00+00:00",
+  "finished_at": "2026-09-10T21:57:43.849173+00:00",
+  "mode": "bring_up + docker crawler (server simulation)",
+  "bring_up": "scripts/bring_up.sh succeeded; app-api/crawler/storage-consumer/network-analyzer",
+  "app_count": 16,
+  "crawl_seconds": 134.0,
+  "crawl_log_line": "Crawl cycle summary: total=16 app_stats=15/16 success reviews=16/16 success",
+  "note_stats": "1 app (com.instagram.android) failed app-stats due to transient DNS in container; reviews still 16/16",
+  "kafka_msg_app_stats": 15,
+  "kafka_msg_reviews": 16000,
+  "kafka_log_bytes": {
+    "app-stats": 5511,
+    "reviews": 5705522,
+    "total": 5711033
+  },
+  "kafka_index_bytes_topics": 125829096,
+  "kafka_topic_dirs_total_bytes": 131540435,
+  "db_app_stats_rows": 15,
+  "db_reviews_rows": 16000,
+  "db_dead_letters": 0,
+  "postgres_bytes": {
+    "app_stats": 57344,
+    "reviews": 6496256
+  },
+  "end_to_end_note": "storage-consumer kept up during crawl; DB matched Kafka when cycle ended (drain ~0 beyond crawl)",
+  "one_week_kafka_log_estimate_16_apps_hourly": 915.0,
+  "kafka_payload_bytes_total": 5544145,
+  "kafka_payload_bytes_app_stats": 4522,
+  "kafka_payload_bytes_reviews": 5539623,
+  "prior_perfect_cycle_same_day": {
+    "crawl_seconds": 135,
+    "summary": "total=16 app_stats=16/16 success reviews=16/16 success",
+    "window_utc": "21:25:48 -> 21:28:03"
+  },
+  "production_disk_guidance": {
+    "per_cycle_kafka_log_mib": 5.45,
+    "per_week_kafka_log_mib_hourly_16_apps": 915.0,
+    "kafka_index_overhead_mib_fixed": 120.0,
+    "postgres_reviews_mib_after_one_cycle": 6.2,
+    "recommended_server_disk_gb": 80
+  }
+}

@@ -68,6 +68,45 @@ hostname اشتباه به کانتینر می‌دهد.
 برای readiness در اختیار compose می‌گذارد. کراولر و `storage-consumer`
 با `depends_on: condition: service_healthy` منتظر آن می‌مانند.
 
+چون `app-api` خودش یک سرویس compose است، `crawler` و `network-analyzer`
+داخل شبکه با `APP_API_BASE_URL=http://app-api:8000` به آن وصل می‌شوند؛
+دیگر به `host.docker.internal` (یا publish شدن پورت روی host فقط برای این
+دو سرویس) نیازی نیست.
+
+## اجرای تست‌ها داخل Docker
+
+سرویس‌های `*-tests` پشت پروفایل composeی `test` هستند تا
+`docker compose up` یا `docker compose --profile tools up` آن‌ها را بالا
+نیاورند. تست‌ها روی همان شبکهٔ داخلی اجرا می‌شوند (`postgres`،
+`kafka:29092`، `app-api:8000`) نه از venv با `localhost`.
+
+یک‌جا همه را اجرا کنید:
+
+```bash
+./scripts/run_tests_in_docker.sh
+# یا بدون rebuild:
+./scripts/run_tests_in_docker.sh --no-build
+```
+
+اسکریپت ابتدا `postgres` / `zookeeper` / `kafka` / `kafka-init` / `app-api`
+را بالا می‌آورد، منتظر healthy می‌ماند، بعد به ترتیب هر `*-tests` را با
+`docker compose --profile test run --rm` اجرا می‌کند، خلاصهٔ PASS/FAIL
+چاپ می‌کند و اگر حتی یک suite شکست بخورد با exit code غیرصفر تمام می‌شود.
+`sentiment-tests` به‌طور پیش‌فرض در اسکریپت نیست (بیلد ایمیج torch/مدل
+سنگین است)؛ در صورت نیاز جداگانه اجرا کنید.
+
+اجرای تکی:
+
+```bash
+docker compose --profile test run --rm crawler-tests
+docker compose --profile test run --rm network-analyzer-tests
+docker compose --profile test run --rm storage-consumer-tests
+docker compose --profile test run --rm storage-consumer-tests-integration
+docker compose --profile test run --rm app-api-tests
+# Optional / heavy (torch + HF model baked into the image):
+docker compose --profile test run --rm sentiment-tests
+```
+
 ## تنظیمات runtime کراولر
 
 `main.py` با `load_settings()` یک شیء immutable به نام `Settings` می‌سازد و
