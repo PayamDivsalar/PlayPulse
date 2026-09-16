@@ -85,6 +85,7 @@ case "${1:-run}" in
         exec python manage.py migrate --noinput "$@"
         ;;
     *)
+        wait_for_postgres
         exec python manage.py "$@"
         ;;
 esac
