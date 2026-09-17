@@ -41,6 +41,10 @@ class Settings:
     iran_country: str = "ir"
     iran_lang: str = "fa"
     registry_request_timeout_seconds: float = 10.0
+    # Per-request socket timeout for google_play_scraper (urllib urlopen).
+    # Without this, a stalled Play Store TCP read can block a worker forever
+    # and pin the APScheduler job (max_instances=1) for hours.
+    playstore_request_timeout_seconds: float = 60.0
     kafka_producer_retries: int = 5
     kafka_producer_retry_backoff_ms: int = 500
     kafka_producer_acks: str = "all"
@@ -83,6 +87,8 @@ class Settings:
             raise CrawlerConfigError("iran_lang must not be empty.")
         if self.registry_request_timeout_seconds <= 0:
             raise CrawlerConfigError("registry_request_timeout_seconds must be > 0.")
+        if self.playstore_request_timeout_seconds <= 0:
+            raise CrawlerConfigError("playstore_request_timeout_seconds must be > 0.")
         if self.kafka_producer_retries < 0:
             raise CrawlerConfigError("kafka_producer_retries must be >= 0.")
         if self.kafka_producer_retry_backoff_ms <= 0:
@@ -193,6 +199,9 @@ def load_settings(env_file: Path | None = None) -> Settings:
         default_lang=os.getenv("CRAWLER_DEFAULT_LANG", "en") or "en",
         iran_country=os.getenv("CRAWLER_IRAN_COUNTRY", "ir") or "ir",
         iran_lang=os.getenv("CRAWLER_IRAN_LANG", "fa") or "fa",
+        playstore_request_timeout_seconds=_env_float(
+            "CRAWLER_PLAYSTORE_REQUEST_TIMEOUT_SECONDS", 60.0
+        ),
         kafka_producer_retries=_env_int("CRAWLER_KAFKA_PRODUCER_RETRIES", 5),
         kafka_producer_retry_backoff_ms=_env_int(
             "CRAWLER_KAFKA_PRODUCER_RETRY_BACKOFF_MS", 500

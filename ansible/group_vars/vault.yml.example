@@ -1,0 +1,21 @@
+---
+# =============================================================================
+# TEMPLATE for the real, encrypted secrets file.
+#
+# This .example is UNENCRYPTED and only documents which secret variables the
+# playbook expects. Do NOT put real secrets here and do NOT commit a real
+# vault.yml.
+#
+# Create the real, encrypted file with:
+#
+#   ansible-vault create group_vars/vault.yml
+#
+# then paste these keys with your REAL production values. group_vars/vault.yml
+# is gitignored so the encrypted file is never committed by accident either.
+# =============================================================================
+
+# Sensitive Postgres credentials. Consumed by templates/env.j2 -> the server's
+# .env, which docker-compose.yml substitutes into every service.
+vault_postgres_db: "project_db"
+vault_postgres_user: "project_user"
+vault_postgres_password: "CHANGE_ME_use_a_long_random_password"

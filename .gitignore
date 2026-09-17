@@ -234,3 +234,9 @@ data/reports/**
 
 # Local analyzer virtualenv created by scripts/network/analyze_pcaps.sh auto-detection.
 .venv-analyzer/
+
+# Ansible: never commit the real inventory (has the production IP) or the
+# decrypted/encrypted vault (has secrets). Only the *.example templates are
+# tracked. The rendered .env lives on the server, not in the repo.
+ansible/inventory.ini
+ansible/group_vars/vault.yml

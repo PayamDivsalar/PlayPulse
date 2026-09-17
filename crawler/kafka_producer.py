@@ -37,6 +37,12 @@ class CrawlerKafkaProducer:
     def __init__(self, bootstrap_servers: str, settings: Settings) -> None:
         self._settings = settings
         self._get_timeout_seconds = settings.kafka_producer_request_timeout_ms / 1000.0
+        # Bound flush/close the same way network_analyzer does: kafka-python
+        # defaults to waiting forever, which can pin a crawl cycle after workers
+        # finish if the broker wedges.
+        self._flush_timeout_seconds = (
+            settings.kafka_producer_delivery_timeout_ms / 1000.0
+        )
         retry = with_retry(
             max_retries=settings.kafka_send_retry_max_attempts,
             base_delay_seconds=settings.kafka_send_retry_base_delay_seconds,
@@ -170,21 +176,24 @@ class CrawlerKafkaProducer:
             future.get(timeout=self._get_timeout_seconds)
 
     def flush(self) -> None:
-        """Block until all buffered messages are sent.
+        """Block until all buffered messages are sent, or until the timeout.
 
         Call before shutdown so pending messages are not lost. Errors are
         logged and re-raised rather than swallowed, since a failed flush means
-        data loss.
+        data loss. The timeout matches ``delivery_timeout_ms`` so a wedged
+        broker cannot hang the crawl cycle indefinitely.
         """
 
         try:
-            self._producer.flush()
+            self._producer.flush(timeout=self._flush_timeout_seconds)
         except KafkaError:
             logger.error("Failed to flush Kafka producer.", exc_info=True)
             raise
 
     def close(self) -> None:
-        """Flush and close the underlying Kafka producer."""
+        """Flush and close the underlying Kafka producer with a bounded wait."""
 
-        self.flush()
-        self._producer.close()
+        try:
+            self.flush()
+        finally:
+            self._producer.close(timeout=self._flush_timeout_seconds)

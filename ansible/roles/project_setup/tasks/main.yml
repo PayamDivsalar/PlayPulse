@@ -1,0 +1,47 @@
+---
+# =============================================================================
+# project_setup role: get the code onto the server and render its .env.
+#
+# The git clone/pull and the .env render are also tagged `deploy` so that
+# `--tags deploy` updates the code and refreshes .env before redeploying,
+# without touching the Docker install.
+# =============================================================================
+
+- name: Ensure git is installed
+  ansible.builtin.apt:
+    name: git
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  tags: [project_setup]
+
+- name: Ensure the project directory exists
+  ansible.builtin.file:
+    path: "{{ project_dir }}"
+    state: directory
+    mode: "0755"
+  tags: [project_setup, deploy]
+
+- name: Clone or update the project repository
+  ansible.builtin.git:
+    repo: "{{ project_repo_url }}"
+    dest: "{{ project_dir }}"
+    version: "{{ project_version }}"
+    update: true
+    # Do not clobber local changes automatically; fail loudly instead so a
+    # human decides. Flip to true only if the server tree is disposable.
+    force: false
+  tags: [project_setup, deploy]
+
+# The template module already: (a) creates .env if it is missing, and (b) when
+# the file exists and its rendered content differs, reports "changed" and — with
+# diff enabled (ansible.cfg [diff] always, or --diff) — prints the change as a
+# unified diff. We deliberately do NOT override that behaviour (no `diff: no`).
+- name: Render .env from templates/env.j2 (creates it, or diffs changes)
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/templates/env.j2"
+    dest: "{{ project_dir }}/.env"
+    mode: "0600"
+    # Keep a timestamped backup of the previous .env whenever it changes.
+    backup: true
+  tags: [project_setup, deploy]
