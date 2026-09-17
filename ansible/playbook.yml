@@ -4,14 +4,22 @@
 #
 # Ansible is a thin layer on top of the project's own tooling: it installs
 # Docker, fetches the repo, renders .env, and then hands off to the existing
-# scripts (scripts/bring_up.sh + scripts/infra/check_infra.sh). It does NOT
-# reimplement compose/bring-up logic.
+# scripts. Deploy role order:
+#   (optional) run_tests_in_docker.sh  →  bring_up.sh --skip-check  →  check_infra.sh
 #
 # Full run (installs Docker, clones repo, renders .env, deploys, health-checks):
 #   ansible-playbook -i inventory.ini playbook.yml --ask-vault-pass
 #
+# Same + isolated docker tests before bring-up:
+#   ansible-playbook -i inventory.ini playbook.yml --ask-vault-pass \
+#     -e "run_tests_before_deploy=true"
+#
 # Only update code + redeploy (skip the Docker install):
 #   ansible-playbook -i inventory.ini playbook.yml --tags deploy --ask-vault-pass
+#
+# Only the optional docker test suite:
+#   ansible-playbook -i inventory.ini playbook.yml --tags tests --ask-vault-pass \
+#     -e "run_tests_before_deploy=true"
 #
 # Only (re)install Docker Engine + Compose plugin:
 #   ansible-playbook -i inventory.ini playbook.yml --tags docker --ask-vault-pass
