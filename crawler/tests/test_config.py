@@ -13,6 +13,7 @@ class SettingsTests(unittest.TestCase):
         settings = Settings.for_testing()
         self.assertEqual(settings.retry_max_attempts, 3)
         self.assertEqual(settings.reviews_fetch_count, 1000)
+        self.assertEqual(settings.playstore_request_timeout_seconds, 60.0)
 
     def test_region_defaults(self) -> None:
         settings = Settings.for_testing()
@@ -35,6 +36,10 @@ class SettingsTests(unittest.TestCase):
     def test_rejects_non_positive_workers(self) -> None:
         with self.assertRaises(CrawlerConfigError):
             Settings.for_testing(max_concurrent_workers=0)
+
+    def test_rejects_non_positive_playstore_timeout(self) -> None:
+        with self.assertRaises(CrawlerConfigError):
+            Settings.for_testing(playstore_request_timeout_seconds=0)
 
     def test_rejects_negative_retry_attempts(self) -> None:
         with self.assertRaises(CrawlerConfigError):

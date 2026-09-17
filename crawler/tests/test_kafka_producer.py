@@ -250,6 +250,17 @@ class CrawlerKafkaProducerTests(unittest.TestCase):
         with self.assertRaises(KafkaError):
             producer.flush()
 
+    def test_flush_and_close_use_delivery_timeout(self) -> None:
+        producer, underlying, _settings = self._build_producer(
+            kafka_producer_delivery_timeout_ms=15000,
+        )
+
+        producer.flush()
+        underlying.flush.assert_called_once_with(timeout=15.0)
+
+        producer.close()
+        underlying.close.assert_called_once_with(timeout=15.0)
+
 
 @pytest.mark.live
 class CrawlerKafkaProducerLiveTests(unittest.TestCase):
