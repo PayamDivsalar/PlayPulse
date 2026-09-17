@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="مستند فنی زیرسیستم تحلیل احساس نظرات (Sentiment)">
+<title>Sentiment Analysis | مستند فنی</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="sentiment.css">
+</head>
+
+<body>
+<a class="portal-back" href="index.html">← مجموعه مستندات پروژه</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <span class="eyebrow">NLP · BATCH / CLI JOB · REVIEWS.SENTIMENT</span>
+    <h1>زیرسیستم تحلیل احساس نظرات <span>(Sentiment)</span></h1>
+    <p>Job دسته‌ای که متن نقدها را با مدل Cardiff XLM-R طبقه‌بندی می‌کند و ستون <code style="direction:ltr;color:#93c5fd;background:transparent">reviews.sentiment</code> را می‌نویسد — بدون دست زدن Storage Consumer به این ستون در upsert.</p>
+
+    <div class="hero-metrics" aria-label="Sentiment characteristics">
+      <div class="metric"><strong>~92%</strong><span>دقت روی ≈۹۰۰ رکورد ارزیابی</span></div>
+      <div class="metric"><strong>XLM-R</strong><span>یک مدل، بدون routing زبانی</span></div>
+      <div class="metric"><strong>Batch</strong><span>Job تمام‌شونده، نه Daemon</span></div>
+      <div class="metric"><strong>3 labels</strong><span>POSITIVE / NEUTRAL / NEGATIVE</span></div>
+    </div>
+  </div>
+</header>
+
+<nav class="top-nav" aria-label="ناوبری مستند">
+  <div class="nav-inner">
+    <a class="active" href="#position">۱. جایگاه</a>
+    <a href="#model">۲. مدل</a>
+    <a href="#architecture">۳. معماری</a>
+    <a href="#flow">۴. فلوی Job</a>
+    <a href="#ownership">۵. مالکیت ستون</a>
+    <a href="#unclassifiable">۶. متن بدون سیگنال</a>
+    <a href="#run">۷. اجرا</a>
+    <a href="#testing">۸. تست</a>
+    <a href="#scripts">۹. اسکریپت‌ها</a>
+    <a href="#decisions">۱۰. تصمیمات</a>
+    <a href="#technologies">۱۱. تکنولوژی‌ها</a>
+  </div>
+</nav>
+
+<main class="container">
+
+<section class="intro">
+  <p>این مستند معماری، انتخاب مدل، فلوی اجرا، قرارداد مالکیت داده با Storage Consumer، نحوهٔ اجرا در venv و Docker، و استراتژی تست زیرسیستم Sentiment را شرح می‌دهد. این زیرسیستم یک <strong>job دسته‌ای / CLI</strong> است: هر بار اجرا می‌شود، تمام نقدهای دارای محتوا را (بر اساس <code>id</code>) پیمایش می‌کند، برچسب احساس را با مدل دوباره محاسبه و <strong>overwrite</strong> می‌کند، سپس خارج می‌شود. Daemon دائمی نیست و با <code>docker compose up</code> معمولی بالا نمی‌آید — پشت پروفایل Compose به نام <code>tools</code> است.</p>
+</section>
+
+<section id="position">
+  <h2><span class="section-number">۱</span> جایگاه در معماری کلی پروژه</h2>
+  <p>مسیر دادهٔ نقدها این‌گونه است: Crawler نقد را از Play Store می‌گیرد و به Kafka می‌فرستد → Storage Consumer آن را در جدول <code>reviews</code> می‌نشاند (بدون نوشتن <code>sentiment</code>) → این Job بعداً ستون <code>sentiment</code> را پر یا به‌روز می‌کند. بنابراین Sentiment یک لایهٔ <strong>تحلیل پس از ماندگارسازی</strong> است، نه بخشی از مسیر ingest زنده.</p>
+
+  <div class="diagram-card"><div class="mermaid">
+flowchart LR
+    Crawler["Crawler"] -->|reviews topic| Kafka
+    Kafka --> SC["Storage Consumer"]
+    SC --> DB[("PostgreSQL<br/>reviews")]
+    Sent["Sentiment Job<br/>(batch/CLI)"] -->|UPDATE sentiment| DB
+
+    style Sent fill:#16a34a,color:#fff
+    style SC fill:#2563eb,color:#fff
+    style DB fill:#7c3aed,color:#fff
+  </div></div>
+
+  <div class="callout"><strong>چرا Job و نه سرویس همیشه روشن؟</strong> تحلیل احساس روی کل جدول (یا دوره‌ای روی همهٔ ردیف‌ها با overwrite) یک کار سنگین CPU/مدل است. جدا کردنش از مسیر Kafka باعث می‌شود ingest نقدها به لود مدل وابسته نباشد، و اپراتور بتواند Job را آگاهانه (مثلاً شبانه یا بعد از یک موج crawl) اجرا کند.</div>
+</section>
+
+<section id="model">
+  <h2><span class="section-number">۲</span> انتخاب مدل و ارزیابی کیفیت</h2>
+  <p>مدل واحد پروژه:</p>
+  <p style="direction:ltr;text-align:left"><code>cardiffnlp/twitter-xlm-roberta-base-sentiment</code></p>
+  <p>هیچ routing زبانی (مدل جدا برای فارسی/انگلیسی) وجود ندارد؛ همهٔ متن‌ها از همین pipeline عبور می‌کنند.</p>
+
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>موضوع</th><th>نتیجه / تصمیم</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>ارزیابی داخلی</strong></td>
+        <td>روی حدود <strong>۹۰۰ رکورد</strong> برچسب‌خورده، دقت حدود <strong>۹۲٪</strong> به‌دست آمد. در مقایسه با اکثر مدل‌های هم‌وزن (هم‌رده از نظر اندازه/هزینه)، این مدل قوی‌تر ظاهر شد و برای حجم و زبان‌های پروژه انتخاب شد.</td>
+      </tr>
+      <tr>
+        <td><strong>چرا نه LLM؟</strong></td>
+        <td>استفاده از LLMهای API-محور بررسی شد، اما <strong>لیمیت نرخ (rate limit) سنگین</strong> داشتند و برای حجم نقدهای پروژه مناسب نبودند: Job باید بتواند هزاران/ده‌ها هزار ردیف را بدون صف‌شدن پشت سهمیهٔ ابری و بدون هزینهٔ پیش‌بینی‌ناپذیر per-token جلو ببرد. مدل محلی Cardiff این محدودیت را ندارد.</td>
+      </tr>
+      <tr>
+        <td><strong>محدودیت شناخته‌شدهٔ فارسی</strong></td>
+        <td>این مدل رسماً روی فارسی fine-tune نشده؛ دقت فارسی عمدتاً از انتقال بین‌زبانی پایهٔ XLM-RoBERTa می‌آید. آزمایش routing به مدل تخصصی فارسی بهبود معناداری نشان نداد؛ بنابراین معماری تک‌مدلی برای سادگی حفظ شد.</td>
+      </tr>
+      <tr>
+        <td><strong>خروجی مجاز</strong></td>
+        <td>فقط <code>POSITIVE</code> / <code>NEUTRAL</code> / <code>NEGATIVE</code> — هم‌تراز با CHECK constraint ستون <code>reviews.sentiment</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="architecture">
+  <h2><span class="section-number">۳</span> معماری لایه‌ای و Composition Root</h2>
+  <p>مثل Crawler و Network Analyzer، این زیرسیستم از کلاس‌های پایتون خالص با تزریق وابستگی ساخته شده است. <code>main.py</code> تنها Composition Root است: Settings را لود می‌کند، اشیاء واقعی را می‌سازد، حلقهٔ batch را می‌چرخاند و در <code>finally</code> اتصال DB را می‌بندد.</p>
+
+  <div class="diagram-card"><div class="mermaid">
+flowchart TD
+    Settings["Settings<br/>(frozen, validated)"] --> Main["main.py<br/>Composition Root"]
+    Main --> CL["SentimentClassifier<br/>(transformers pipeline)"]
+    Main --> DB["Database<br/>(psycopg2, یک اتصال)"]
+    Main --> Repo["ReviewRepository"]
+    Main --> Svc["SentimentService"]
+    CL --> Svc
+    DB --> Svc
+    Repo --> Svc
+    Svc --> Reviews[("reviews table")]
+
+    style Settings fill:#7c3aed,color:#fff
+    style Main fill:#2563eb,color:#fff
+    style Svc fill:#16a34a,color:#fff
+    style CL fill:#f59e0b,color:#fff
+  </div></div>
+
+  <div class="layer-grid">
+    <article class="layer-card">
+      <div class="layer-kicker">CORE</div>
+      <h3>classifier.py</h3>
+      <p>Wrapper همگام روی Hugging Face pipeline. بدون وابستگی به psycopg2. مدل یک‌بار در سازنده لود می‌شود؛ هر batch همان pipeline را reuse می‌کند. متن خالی به مدل نمی‌رسد.</p>
+    </article>
+    <article class="layer-card">
+      <div class="layer-kicker">PERSISTENCE</div>
+      <h3>database + repository</h3>
+      <p>الگوی مشابه Storage Consumer: یک اتصال lazy، تراکنش صریح، timeoutهای session. Repository فقط fetch keyset و UPDATE دسته‌ای با <code>execute_values</code>.</p>
+    </article>
+    <article class="layer-card">
+      <div class="layer-kicker">RUNTIME</div>
+      <h3>sentiment_service.py</h3>
+      <p>یک چرخه: خواندن صفحه → classify → (مگر dry-run) نوشتن. cursor داخلی <code>after_id</code> صفحه را جلو می‌برد تا Job تمام شود.</p>
+    </article>
+  </div>
+</section>
+
+<section id="flow">
+  <h2><span class="section-number">۴</span> فلوی یک Job کامل</h2>
+  <p>هر اجرا از <code>id = 0</code> شروع می‌کند و تا وقتی <code>run_batch_cycle()</code> مقدار <code>True</code> برگرداند (یعنی صفحه‌ای کار داشته) حلقه ادامه دارد. برگشت <code>False</code> یعنی دیگر ردیفی بعد از cursor نیست — موفقیت با «کاری نمانده»، نه شکست.</p>
+
+  <div class="diagram-card"><div class="mermaid">
+sequenceDiagram
+    participant Main as main.py
+    participant Svc as SentimentService
+    participant Repo as ReviewRepository
+    participant CL as SentimentClassifier
+    participant PG as PostgreSQL
+
+    Main->>Svc: while run_batch_cycle()
+    Svc->>Repo: fetch_batch(after_id, LIMIT batch_size)
+    Repo->>PG: SELECT id, content WHERE content != '' AND id > after_id
+    PG-->>Repo: rows
+    alt هیچ ردیفی نیست
+        Svc-->>Main: False → پایان Job
+    else صفحه غیرخالی
+        Svc->>CL: classify_batch(texts)
+        CL-->>Svc: labels (یا None برای خالی)
+        Note over Svc: None → NEUTRAL<br/>after_id = آخرین id صفحه
+        alt dry-run
+            Svc-->>Main: True (فقط لاگ شمارش، بدون WRITE)
+        else نوشتن واقعی
+            Svc->>Repo: update_sentiments(id, label)
+            Repo->>PG: UPDATE ... FROM (VALUES ...)
+            Svc-->>Main: True
+        end
+    end
+  </div></div>
+
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>جزئیات</th><th>رفتار</th></tr></thead>
+    <tbody>
+      <tr><td>Pagination</td><td>Keyset روی <code>id</code> (<code>id &gt; after_id</code>) — مستقل از مقدار فعلی <code>sentiment</code>.</td></tr>
+      <tr><td>Overwrite</td><td>هر اجرای Job برچسب‌های قبلی را دوباره می‌نویسد؛ برای اعمال مدل جدید یا اصلاح اشتباه مفید است.</td></tr>
+      <tr><td>Batch پیش‌فرض</td><td><code>SENTIMENT_BATCH_SIZE=100</code> (قابل override با <code>--batch-size</code>).</td></tr>
+      <tr><td>Truncation مدل</td><td>pipeline با <code>truncation=True</code> و <code>max_length=512</code> صدا زده می‌شود تا نقدهای بلند خطا ندهند.</td></tr>
+      <tr><td>Exit codes</td><td><code>0</code> موفقیت؛ <code>1</code> خطای config/classification/عمومی؛ <code>2</code> خطای argparse.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="ownership">
+  <h2><span class="section-number">۵</span> قرارداد مالکیت ستون <code>sentiment</code></h2>
+  <p>ستون در migration مربوط به Storage Consumer ساخته شده (با CHECK)، اما <strong>مالک نوشتن</strong> فقط این زیرسیستم است:</p>
+  <ul>
+    <li>Storage Consumer در upsert نقدها هرگز <code>sentiment</code> را لمس نمی‌کند — تا re-sync کراولر نتیجهٔ تحلیل را پاک نکند.</li>
+    <li>تست یکپارچگی Storage Consumer صریحاً ثابت می‌کند <code>sentiment</code> بعد از upsert زنده می‌ماند.</li>
+    <li>این Job تنها نویسنده‌ای است که باید <code>UPDATE reviews SET sentiment = …</code> بزند.</li>
+  </ul>
+  <div class="callout"><strong>نتیجه عملی:</strong> می‌توانید Job را هر چند وقت یک‌بار اجرا کنید؛ موج‌های بعدی crawl/upsert نقد، برچسب‌های قبلی را خراب نمی‌کنند مگر خود Job دوباره overwrite کند.</div>
+</section>
+
+<section id="unclassifiable">
+  <h2><span class="section-number">۶</span> متن بدون سیگنال و برچسب پیش‌فرض</h2>
+  <p>Classifier برای متن <code>None</code> / خالی / فقط فاصله، مدل را صدا نمی‌زند و <code>None</code> برمی‌گرداند. سرویس آن را به <code>NEUTRAL</code> نگاشت می‌کند و می‌نویسد.</p>
+  <ul>
+    <li><strong>چرا NEUTRAL؟</strong> کم‌ادعاترین برچسب مجاز CHECK است؛ نگه‌داشتن NULL ارزش تحلیلی ندارد.</li>
+    <li><strong>چرا برای جلوگیری از حلقهٔ بی‌نهایت لازم نیست؟</strong> چون pagination روی <code>id</code> است، نه روی «sentiment هنوز NULL است». نوشتن NEUTRAL فقط پیش‌فرض پایدار است.</li>
+    <li>فیلتر SELECT فقط روی غیرخالی بودن <code>content</code> است؛ مقدار فعلی sentiment در انتخاب دخالت ندارد.</li>
+  </ul>
+</section>
+
+<section id="run">
+  <h2><span class="section-number">۷</span> نحوهٔ اجرا: venv، Docker، فلگ‌ها و env</h2>
+
+  <h3>۷.۱ پیش‌نیاز داده</h3>
+  <p>Postgres باید بالا باشد و جدول <code>reviews</code> (از طریق Storage Consumer / migrations) وجود داشته باشد. معمولاً اول استک را با <code>bring_up</code> یا حداقل <code>postgres</code> + مسیر ingest نقدها بالا می‌آورید، بعد Job را می‌زنید.</p>
+
+  <h3>۷.۲ اجرا روی Host / venv</h3>
+  <p>حتماً از <strong>ریشهٔ مخزن</strong> (<code>PlayPulse/</code>) اجرا کنید — نه از داخل پوشهٔ <code>sentiment/</code> — تا importهای <code>from sentiment...</code> resolve شوند.</p>
+
+  <div class="diagram-card" style="direction:ltr;text-align:left;font-family:Consolas,monospace;white-space:pre;line-height:1.7;font-size:.9rem;color:#0f172a">
+cd ~/PlayPulse
+python3 -m venv sentiment/.venv
+source sentiment/.venv/bin/activate
+
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -r sentiment/requirements.txt
+
+cp sentiment/.env.example sentiment/.env
+# POSTGRES_* را برای host پر کنید (معمولاً 127.0.0.1)
+
+python -m sentiment.main run
+python -m sentiment.main run --batch-size 50 --dry-run
+python -m sentiment.main -v run
+  </div>
+
+  <h3>۷.۳ سوئیچ‌ها و آرگومان‌های CLI</h3>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>آرگومان</th><th>معنا</th></tr></thead>
+    <tbody>
+      <tr><td><code>run</code> (subcommand الزامی)</td><td>شروع Job: پیمایش کل نقدهای واجد شرایط و overwrite برچسب‌ها.</td></tr>
+      <tr><td><code>--batch-size N</code></td><td>جایگزین موقت <code>SENTIMENT_BATCH_SIZE</code> فقط برای همین اجرا (<code>N &gt; 0</code>).</td></tr>
+      <tr><td><code>--dry-run</code></td><td>طبقه‌بندی و لاگ شمارش POSITIVE/NEUTRAL/NEGATIVE؛ <strong>هیچ UPDATEای نوشته نمی‌شود</strong>. Cursor همچنان جلو می‌رود تا Job تمام شود.</td></tr>
+      <tr><td><code>-v</code> / <code>--verbose</code></td><td>لاگ سطح DEBUG.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>۷.۴ متغیرهای محیطی (<code>sentiment/.env</code>)</h3>
+  <p>فایل <code>sentiment/.env</code> فقط برای اجرای host/venv است. در Docker، آدرس‌ها از <code>docker-compose.yml</code> تزریق می‌شوند و <code>load_dotenv</code> متغیرهای از قبل set‌شده را override نمی‌کند.</p>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>متغیر</th><th>الزامی؟</th><th>نقش</th></tr></thead>
+    <tbody>
+      <tr><td><code>POSTGRES_DB</code> / <code>USER</code> / <code>PASSWORD</code> / <code>HOST</code></td><td>بله</td><td>اتصال به همان دیتابیسی که Storage Consumer می‌نویسد.</td></tr>
+      <tr><td><code>POSTGRES_PORT</code></td><td>خیر (۵۴۳۲)</td><td>پورت Postgres.</td></tr>
+      <tr><td><code>SENTIMENT_MODEL_NAME</code></td><td>خیر</td><td>پیش‌فرض Cardiff XLM-R بالا.</td></tr>
+      <tr><td><code>SENTIMENT_BATCH_SIZE</code></td><td>خیر (۱۰۰)</td><td>اندازهٔ صفحهٔ fetch/classify.</td></tr>
+      <tr><td><code>SENTIMENT_DB_*_TIMEOUT_*</code></td><td>خیر</td><td>timeout اتصال و statement / idle-in-transaction.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>۷.۵ ساخت و اجرا در Docker</h3>
+  <p>سرویس Compose: <code>sentiment</code>، پروفایل <code>tools</code>، image tag مشترک <code>playpulse-sentiment:latest</code>. Dockerfile مدل را داخل image bake می‌کند تا اولین <code>run</code> منتظر دانلود چندصدمگابایتی نماند. Torch به‌صورت CPU-only نصب می‌شود.</p>
+
+  <div class="diagram-card" style="direction:ltr;text-align:left;font-family:Consolas,monospace;white-space:pre;line-height:1.7;font-size:.9rem;color:#0f172a">
+# ساخت image (چند دقیقه؛ سنگین به‌خاطر torch + مدل)
+docker compose --profile tools build sentiment
+
+# اجرای Job روی شبکهٔ Compose (POSTGRES_HOST=postgres)
+docker compose run --rm sentiment run
+docker compose run --rm sentiment run --batch-size 50 --dry-run
+docker compose run --rm sentiment -v run
+  </div>
+
+  <div class="callout"><strong>نکته:</strong> <code>docker compose up</code> معمولی و حتی <code>bring_up.sh</code> این سرویس را به‌صورت daemon نگه نمی‌دارند. مثل <code>network-analyzer</code> باید صریحاً با <code>compose run</code> (و پروفایل <code>tools</code>) صدا زده شود. ENTRYPOINT برابر <code>python -m sentiment.main</code> است؛ آرگومان‌های بعد از نام سرویس مستقیماً به CLI می‌رسند.</div>
+</section>
+
+<section id="testing">
+  <h2><span class="section-number">۸</span> استراتژی تست و نحوهٔ اجرا در هر محیط</h2>
+
+  <div class="diagram-card"><div class="mermaid">
+flowchart TD
+    U["Unit<br/>Mock pipeline / Fake cursor<br/>سریع، بدون وزن مدل"] --> I["Integration<br/>Postgres واقعی + StubClassifier"]
+    I --> M["Manual smoke<br/>مدل واقعی، بدون DB"]
+    M --> D["Docker test profile<br/>sentiment-tests / -integration"]
+
+    style U fill:#16a34a,color:#fff
+    style I fill:#2563eb,color:#fff
+    style M fill:#f59e0b,color:#fff
+    style D fill:#7c3aed,color:#fff
+  </div></div>
+
+  <h3>۸.۱ Unit — چه چیزی را می‌پوشاند؟</h3>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>فایل</th><th>چیزی که ثابت می‌کند</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>tests/unit/test_classifier.py</code></td>
+        <td>نگاشت برچسب‌های Cardiff (lowercase / Title / <code>LABEL_N</code>) به POSITIVE/NEUTRAL/NEGATIVE؛ متن خالی/None بدون صدا زدن مدل → <code>None</code>؛ حفظ ترتیب در batch ترکیبی؛ خطای <code>ClassificationError</code> برای برچسب ناشناخته؛ لود یک‌باره از طریق <code>pipeline_factory</code> تزریقی (بدون دانلود وزن).</td>
+      </tr>
+      <tr>
+        <td><code>tests/unit/test_review_repository.py</code></td>
+        <td>شکل SQL: فیلتر محتوا، keyset <code>id &gt; %s</code>، <strong>عدم</strong> فیلتر روی ستون sentiment؛ پاس‌دادن <code>after_id</code>؛ UPDATE با <code>execute_values</code>؛ skip وقتی لیست نتایج خالی است.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>۸.۲ Integration — چه چیزی را می‌پوشاند؟</h3>
+  <p><code>tests/integration/test_sentiment_e2e.py</code> (مارکر <code>integration</code>): مسیر واقعی DB را تست می‌کند — ثبت اپ تستی، درج نقدها (بعضی با برچسب اشتباه از قبل)، اجرای یک <code>run_batch_cycle</code>، و اثبات overwrite. Classifier یک <strong>Stub</strong> مبتنی بر keyword است تا وزن مدل دانلود نشود؛ تمرکز تست روی fetch → write → re-read است. اگر Postgres یا env نباشد، تمیز skip می‌شود.</p>
+
+  <h3>۸.۳ اجرای تست روی Host / venv</h3>
+  <div class="diagram-card" style="direction:ltr;text-align:left;font-family:Consolas,monospace;white-space:pre;line-height:1.7;font-size:.9rem;color:#0f172a">
+cd ~/PlayPulse
+source sentiment/.venv/bin/activate
+
+# Unit — سریع، بدون نیاز به Postgres
+pytest sentiment/tests/unit -v
+
+# Integration — نیاز به Postgres در دسترس + sentiment/.env (یا storage_consumer/.env)
+docker compose up -d postgres   # اگر هنوز بالا نیست
+pytest sentiment/tests/integration -m integration -v
+  </div>
+
+  <h3>۸.۴ اجرای تست در Docker (پروفایل <code>test</code>)</h3>
+  <p>دو سرویس جدا، همان image سنگین <code>playpulse-sentiment:latest</code>:</p>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>سرویس Compose</th><th>فرمان داخل کانتینر</th><th>نیاز</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>sentiment-tests</code></td>
+        <td><code>pytest sentiment/tests/unit -v</code></td>
+        <td>Postgres healthy (depends_on)؛ تست‌ها از host به‌صورت volume mount می‌شوند چون Dockerfile لایهٔ <code>tests/</code> را حذف می‌کند.</td>
+      </tr>
+      <tr>
+        <td><code>sentiment-tests-integration</code></td>
+        <td><code>pytest sentiment/tests/integration -v -m integration</code></td>
+        <td>همین‌طور؛ env داخل شبکه Compose با <code>POSTGRES_HOST=postgres</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="diagram-card" style="direction:ltr;text-align:left;font-family:Consolas,monospace;white-space:pre;line-height:1.7;font-size:.9rem;color:#0f172a">
+# اول image را بسازید (اگر هنوز نیست) — cold build طولانی است
+docker compose --profile tools build sentiment
+
+# Unit در شبکهٔ Compose
+docker compose --profile test run --rm sentiment-tests
+
+# Integration
+docker compose --profile test run --rm sentiment-tests-integration
+  </div>
+
+  <h3>۸.۵ ارکستراتور <code>run_tests_in_docker.sh</code></h3>
+  <p>اسکریپت <code>./scripts/run_tests_in_docker.sh</code> هر دو سرویس <code>sentiment-tests</code> و <code>sentiment-tests-integration</code> را در صف اجرا دارد، اما <strong>عمداً sentiment را cold-build نمی‌کند</strong>. اگر image <code>playpulse-sentiment:latest</code> روی ماشین نباشد، آن ردیف‌ها <code>SKIPPED</code> می‌شوند (تا یک build چنددقیقه‌ای کل suite را بلوکه نکند). پس برای سبز شدن آن‌ها در این اسکریپت، یک‌بار از قبل:</p>
+  <div class="diagram-card" style="direction:ltr;text-align:left;font-family:Consolas,monospace;white-space:pre;line-height:1.7;font-size:.9rem;color:#0f172a">
+docker compose --profile tools build sentiment
+./scripts/run_tests_in_docker.sh
+  </div>
+
+  <h3>۸.۶ Smoke دستی با مدل واقعی (بدون DB)</h3>
+  <p>برای اطمینان از اینکه وزن مدل روی ماشین لود می‌شود و خروجی برچسب معقول است — جدا از pytest:</p>
+  <div class="diagram-card" style="direction:ltr;text-align:left;font-family:Consolas,monospace;white-space:pre;line-height:1.7;font-size:.9rem;color:#0f172a">
+source sentiment/.venv/bin/activate
+python scripts/manual_sentiment_check.py
+  </div>
+  <p>مستند اختصاصی این اسکریپت: <a href="script-manual-sentiment-check.html">manual_sentiment_check.py</a>.</p>
+</section>
+
+<section id="scripts">
+  <h2><span class="section-number">۹</span> اسکریپت‌ها و نقاط اتصال مرتبط</h2>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>مسیر</th><th>ارتباط با Sentiment</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><a href="script-manual-sentiment-check.html"><code>scripts/manual_sentiment_check.py</code></a></td>
+        <td>Smoke مدل واقعی Cardiff روی نمونه‌های en/fa بدون دیتابیس.</td>
+      </tr>
+      <tr>
+        <td><a href="script-run-tests-in-docker.html"><code>scripts/run_tests_in_docker.sh</code></a></td>
+        <td>اجرای کانتینرهای تست sentiment در صف کلی؛ skip اگر image نباشد.</td>
+      </tr>
+      <tr>
+        <td><a href="script-bring-up.html"><code>scripts/bring_up.sh</code></a></td>
+        <td>استک داده (Postgres و …) را بالا می‌آورد؛ خودِ Job sentiment را به‌صورت سرویس دائمی استارت نمی‌کند — بعداً باید <code>compose run sentiment</code> بزنید.</td>
+      </tr>
+      <tr>
+        <td>Compose <code>sentiment</code> / <code>sentiment-tests*</code></td>
+        <td>تعریف build، env شبکه، و entrypointهای اجرا/تست در <code>docker-compose.yml</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="decisions">
+  <h2><span class="section-number">۱۰</span> تصمیمات کلیدی</h2>
+  <div class="decision-list">
+    <article class="decision">
+      <h3>مدل محلی Cardiff به‌جای LLM ابری</h3>
+      <p>دقت ≈۹۲٪ روی ≈۹۰۰ نمونه و برتری نسبی نسبت به مدل‌های هم‌وزن، همراه با نبود rate limit ابری، برای حجم دادهٔ پروژه عملی‌تر از LLMهای محدود به سهمیه بود.</p>
+    </article>
+    <article class="decision">
+      <h3>یک مدل برای همهٔ زبان‌ها</h3>
+      <p>Routing به مدل فارسی تخصصی بهبود معنادار نداد؛ پیچیدگی عملیاتی دو مدل (دو cache، دو مسیر خطا) پذیرفته نشد.</p>
+    </article>
+    <article class="decision">
+      <h3>Job دسته‌ای با overwrite، نه «فقط NULLها»</h3>
+      <p>هر اجرا کل ردیف‌های واجد شرایط را دوباره برچسب می‌زند تا تعویض مدل یا اصلاح باگ بدون migration دستی ممکن باشد. Pagination روی <code>id</code> جلوی حلقهٔ بی‌نهایت را می‌گیرد.</p>
+    </article>
+    <article class="decision">
+      <h3>مالکیت انحصاری ستون <code>sentiment</code></h3>
+      <p>Storage Consumer عمداً این ستون را در upsert دست نمی‌زند تا مسیر crawl بتواند بدون پاک کردن تحلیل، نقدها را تازه کند.</p>
+    </article>
+    <article class="decision">
+      <h3>پروفایل Compose <code>tools</code> + bake مدل در image</h3>
+      <p>استک روزمره با سرویس چندگیگابایتی torch شلوغ نمی‌شود؛ وقتی Job لازم است، image از قبل مدل را دارد و اولین run سریع‌تر است.</p>
+    </article>
+    <article class="decision">
+      <h3>جداسازی Unit (Mock) از Integration (Stub+DB) از Smoke (مدل واقعی)</h3>
+      <p>دانلود وزن نباید پیش‌شرط هر <code>pytest</code> سریع باشد؛ e2e روی قرارداد DB تمرکز دارد؛ smoke دستی فقط وقتی کیفیت مدل مهم است.</p>
+    </article>
+    <article class="decision">
+      <h3><code>.env</code> هاست جدا از env داکر</h3>
+      <p>مثل بقیهٔ زیرسیستم‌ها: روی host معمولاً <code>127.0.0.1</code>؛ داخل Compose <code>postgres</code> — تا فایل توسعه شبکهٔ داخلی را خراب نکند.</p>
+    </article>
+  </div>
+</section>
+
+<section id="technologies">
+  <h2><span class="section-number">۱۱</span> ابزارها و تکنولوژی‌های استفاده‌شده</h2>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>ابزار</th><th>نقش</th></tr></thead>
+    <tbody>
+      <tr><td>transformers (Hugging Face)</td><td>Pipeline تحلیل احساس و لود مدل Cardiff XLM-R</td></tr>
+      <tr><td>torch (CPU wheel)</td><td>موتور اجرای مدل؛ نصب جداگانه برای جلوگیری از wheel غول‌پیکر CUDA</td></tr>
+      <tr><td>sentencepiece</td><td>وابستگی tokenizer مدل‌های XLM-R</td></tr>
+      <tr><td>psycopg2</td><td>اتصال و تراکنش PostgreSQL؛ <code>execute_values</code> برای UPDATE دسته‌ای</td></tr>
+      <tr><td>python-dotenv</td><td>بارگذاری <code>sentiment/.env</code> در اجرای host</td></tr>
+      <tr><td>pytest</td><td>Unit و Integration با مارکر <code>integration</code></td></tr>
+      <tr><td>Docker Compose profiles <code>tools</code> / <code>test</code></td><td>اجرای Job و کانتینرهای تست بدون قاطی شدن با استک پیش‌فرض</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+</main>
+
+<footer>Project Technical Documentation Portal</footer>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="mermaid-config.js"></script>
+</body>
+</html>

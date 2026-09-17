@@ -1,1 +1,105 @@
-<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>مستندات فنی پروژه</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="style.css"></head><body><header class="site-header"><div class="header-inner"><a class="brand" href="index.html">مستندات فنی پروژه</a><nav><a class="active" href="index.html">خانه</a><a href="application-registry.html">Application Registry</a><a href="database-schema.html">Database Schema</a><a href="infra-setup.html">Infrastructure</a><a href="crawler.html">Crawler</a><a href="storage-consumer.html">Storage Consumer</a></nav></div></header><main class="hub"><section class="hero"><span class="eyebrow">PROJECT DOCUMENTATION</span><h1>مجموعه مستندات فنی پروژه</h1><p>این مجموعه، معماری نرم‌افزار، طراحی پایگاه‌داده، جمع‌آوری داده و اعتبارسنجی زیرساخت پروژه را در قالب یک مرجع یکپارچه مستند می‌کند.</p></section><section class="cards"><a class="doc-card" href="application-registry.html"><div class="card-icon">▣</div><span class="card-tag">ARCHITECTURE & API</span><h2>Application Registry</h2><p>معماری لایه‌ای، جریان درخواست‌ها، طراحی API، تصمیمات مهندسی و استراتژی تست زیرسیستم مدیریت اپلیکیشن‌ها.</p><span class="go">مشاهده مستند ←</span></a><a class="doc-card" href="database-schema.html"><div class="card-icon">◫</div><span class="card-tag">DATA ARCHITECTURE</span><h2>Database Schema</h2><p>اسکیمای جدول‌ها، روابط داده‌ای، ER Diagramها و منطق تصمیمات طراحی پایگاه‌داده پروژه.</p><span class="go">مشاهده مستند ←</span></a><a class="doc-card" href="infra-setup.html"><div class="card-icon">⚙</div><span class="card-tag">INFRASTRUCTURE</span><h2>Infrastructure Setup</h2><p>پیش‌نیازها، Smoke Test خودکار PostgreSQL و Kafka و ملاحظات طراحی زیرساخت پایه.</p><span class="go">مشاهده مستند ←</span></a><a class="doc-card" href="crawler.html"><div class="card-icon">◌</div><span class="card-tag">DATA COLLECTION</span><h2>Play Store Crawler</h2><p>مدل همزمانی، Rate Limiting، Dependency Injection، فلوی کامل خزش، قرارداد داده و استراتژی تست زیرسیستم کراولر.</p><span class="go">مشاهده مستند ←</span></a><a class="doc-card" href="storage-consumer.html"><div class="card-icon">◉</div><span class="card-tag">DATA PERSISTENCE</span><h2>Storage Consumer</h2><p>مصرف تاپیک‌های Kafka، تضمین‌های Idempotency، ترتیب Write-before-Commit، صف پیام‌های مرده، مالکیت اسکیما و مدل همزمانی زیرسیستم ذخیره‌سازی.</p><span class="go">مشاهده مستند ←</span></a></section><section class="presentation-note"><h2>نقشه مستندات</h2><div class="flow"><div>Architecture</div><span>→</span><div>Data</div><span>→</span><div>Infrastructure</div><span>→</span><div>Collection</div><span>→</span><div>Persistence</div></div><p>این اسناد مستقل، در کنار هم یک تصویر یکپارچه از لایه‌های اصلی پروژه ارائه می‌دهند: از معماری و مدل داده تا جمع‌آوری و ماندگارسازی آن.</p></section></main><footer>Project Technical Documentation</footer></body></html>
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مستندات فنی پروژه</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">مستندات فنی پروژه</a>
+    <nav>
+      <a class="active" href="index.html">خانه</a>
+      <a href="application-registry.html">Application Registry</a>
+      <a href="database-schema.html">Database Schema</a>
+      <a href="infra-setup.html">Infrastructure</a>
+      <a href="crawler.html">Crawler</a>
+      <a href="storage-consumer.html">Storage Consumer</a>
+      <a href="sentiment.html">Sentiment</a>
+      <a href="scripts.html">Scripts</a>
+    </nav>
+  </div>
+</header>
+
+<main class="hub">
+  <section class="hero">
+    <span class="eyebrow">PROJECT DOCUMENTATION</span>
+    <h1>مجموعه مستندات فنی پروژه</h1>
+    <p>این مجموعه، معماری نرم‌افزار، طراحی پایگاه‌داده، جمع‌آوری داده، تحلیل احساس، اعتبارسنجی زیرساخت و اسکریپت‌های عملیاتی پروژه را در قالب یک مرجع یکپارچه مستند می‌کند.</p>
+  </section>
+
+  <section class="cards">
+    <a class="doc-card" href="application-registry.html">
+      <div class="card-icon">▣</div>
+      <span class="card-tag">ARCHITECTURE & API</span>
+      <h2>Application Registry</h2>
+      <p>معماری لایه‌ای، جریان درخواست‌ها، طراحی API، تصمیمات مهندسی و استراتژی تست زیرسیستم مدیریت اپلیکیشن‌ها.</p>
+      <span class="go">مشاهده مستند ←</span>
+    </a>
+    <a class="doc-card" href="database-schema.html">
+      <div class="card-icon">◫</div>
+      <span class="card-tag">DATA ARCHITECTURE</span>
+      <h2>Database Schema</h2>
+      <p>اسکیمای جدول‌ها، روابط داده‌ای، ER Diagramها و منطق تصمیمات طراحی پایگاه‌داده پروژه.</p>
+      <span class="go">مشاهده مستند ←</span>
+    </a>
+    <a class="doc-card" href="infra-setup.html">
+      <div class="card-icon">⚙</div>
+      <span class="card-tag">INFRASTRUCTURE</span>
+      <h2>Infrastructure Setup</h2>
+      <p>پیش‌نیازها، Smoke Test خودکار PostgreSQL و Kafka و ملاحظات طراحی زیرساخت پایه.</p>
+      <span class="go">مشاهده مستند ←</span>
+    </a>
+    <a class="doc-card" href="crawler.html">
+      <div class="card-icon">◌</div>
+      <span class="card-tag">DATA COLLECTION</span>
+      <h2>Play Store Crawler</h2>
+      <p>مدل همزمانی، Rate Limiting، Dependency Injection، فلوی کامل خزش، قرارداد داده و استراتژی تست زیرسیستم کراولر.</p>
+      <span class="go">مشاهده مستند ←</span>
+    </a>
+    <a class="doc-card" href="storage-consumer.html">
+      <div class="card-icon">◉</div>
+      <span class="card-tag">DATA PERSISTENCE</span>
+      <h2>Storage Consumer</h2>
+      <p>مصرف تاپیک‌های Kafka، تضمین‌های Idempotency، ترتیب Write-before-Commit، صف پیام‌های مرده، مالکیت اسکیما و مدل همزمانی زیرسیستم ذخیره‌سازی.</p>
+      <span class="go">مشاهده مستند ←</span>
+    </a>
+    <a class="doc-card" href="sentiment.html">
+      <div class="card-icon">☺</div>
+      <span class="card-tag">NLP · ANALYSIS</span>
+      <h2>Sentiment Analysis</h2>
+      <p>Job دسته‌ای طبقه‌بندی احساس نقدها با Cardiff XLM-R، مالکیت ستون reviews.sentiment، اجرا در venv/Docker و استراتژی تست Unit/Integration/Smoke.</p>
+      <span class="go">مشاهده مستند ←</span>
+    </a>
+    <a class="doc-card" href="scripts.html">
+      <div class="card-icon">⌘</div>
+      <span class="card-tag">OPERATIONS</span>
+      <h2>Scripts</h2>
+      <p>اسکریپت‌های راه‌اندازی، بررسی زیرساخت، تأیید صحت داده، تحلیل شبکه، گزارش‌گیری چرخه و اجرای تست‌ها در Docker.</p>
+      <span class="go">مشاهده مستند ←</span>
+    </a>
+  </section>
+
+  <section class="presentation-note">
+    <h2>نقشه مستندات</h2>
+    <div class="flow">
+      <div>Architecture</div><span>→</span>
+      <div>Data</div><span>→</span>
+      <div>Infrastructure</div><span>→</span>
+      <div>Collection</div><span>→</span>
+      <div>Persistence</div><span>→</span>
+      <div>Sentiment</div><span>→</span>
+      <div>Scripts</div>
+    </div>
+    <p>این اسناد مستقل، در کنار هم یک تصویر یکپارچه از لایه‌های اصلی پروژه ارائه می‌دهند: از معماری و مدل داده تا جمع‌آوری، ماندگارسازی، تحلیل احساس و عملیات روزمره.</p>
+  </section>
+</main>
+
+<footer>Project Technical Documentation</footer>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>manual_sentiment_check.py | مستندات اسکریپت‌ها</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">مستندات فنی پروژه</a>
+    <nav>
+      <a href="index.html">خانه</a>
+      <a href="application-registry.html">Application Registry</a>
+      <a href="database-schema.html">Database Schema</a>
+      <a href="infra-setup.html">Infrastructure</a>
+      <a href="crawler.html">Crawler</a>
+      <a href="storage-consumer.html">Storage Consumer</a>
+      <a href="sentiment.html">Sentiment</a>
+      <a class="active" href="scripts.html">Scripts</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">
+    <span class="eyebrow">SCRIPTS · SENTIMENT SMOKE</span>
+    <h1>manual_sentiment_check.py — Smoke دستی مدل احساس</h1>
+  </div>
+
+  <article class="doc-content">
+    <div dir="rtl">
+      <p><a href="scripts.html">← بازگشت به فهرست اسکریپت‌ها</a></p>
+      <hr>
+
+      <p><b>مسیر فایل:</b> <code>scripts/manual_sentiment_check.py</code></p>
+      <p>مستند کامل زیرسیستم: <a href="sentiment.html">Sentiment Analysis</a>.</p>
+
+      <hr>
+      <p><b>۱. کاراییش به زبان ساده</b></p>
+      <p align="justify">یک Smoke دستی و خارج از pytest است: مدل واقعی Cardiff XLM-R را لود می‌کند، چند جملهٔ نمونهٔ انگلیسی و فارسی (مثبت / منفی / خنثی‌گونه) را طبقه‌بندی می‌کند و برچسب‌ها را روی ترمینال چاپ می‌کند. هدف، یک چک سریع کیفیت/سلامت مدل است — بدون دیتابیس، بدون Kafka، بدون pipeline کامل.</p>
+
+      <hr>
+      <p><b>۲. کجا در پروژه کلی استفاده می‌شود؟</b></p>
+      <ul>
+        <li>زیرسیستم <code>sentiment/</code>: تأیید سریع اینکه classifier و وزن مدل روی ماشین فعلی درست لود می‌شوند.</li>
+        <li>بعد از تغییر مدل پیش‌فرض، ارتقای transformers، یا نصب تازهٔ venv احساس.</li>
+        <li><b>جایگزین تست خودکار نیست</b>؛ سوئیت‌های <code>sentiment-tests</code> / integration مسیر رسمی تست‌اند. این اسکریپت برای چشم انسان و دیباگ سریع است.</li>
+        <li>در فهرست عملیاتی <code>scripts/</code> عمداً سبک و مستقل نگه داشته شده تا بدون بالا آوردن کل استک قابل اجرا باشد.</li>
+      </ul>
+
+      <hr>
+      <p><b>۳. چیکارا می‌کند؟</b></p>
+      <ol>
+        <li>ریشهٔ مخزن را به <code>sys.path</code> اضافه می‌کند تا <code>from sentiment...</code> هنگام اجرای مستقیم اسکریپت کار کند.</li>
+        <li>نام مدل پیش‌فرض را از <code>sentiment.config.DEFAULT_MODEL_NAME</code> می‌خواند.</li>
+        <li><code>SentimentClassifier</code> را با آن مدل می‌سازد.</li>
+        <li>یک batch از نمونه‌های ثابت (en+/en-/en~ و fa+/fa-/fa~) را classify می‌کند.</li>
+        <li>جدول سادهٔ <code>tag / label / text</code> را چاپ می‌کند و با exit 0 خارج می‌شود.</li>
+      </ol>
+
+      <hr>
+      <p><b>۴. تصمیمات معماری</b></p>
+      <ul>
+        <li><b>خارج از pytest:</b> لود مدل واقعی کند و سنگین است؛ قاطی کردن آن با unit testهای سریع، بازخورد developer را خراب می‌کند.</li>
+        <li><b>بدون DB:</b> مرز مسئولیت روشن — فقط مدل و خروجی برچسب، نه صحت pipeline ذخیره‌سازی.</li>
+        <li><b>نمونه‌های دوزبانهٔ ثابت:</b> پروژه reviews فارسی و انگلیسی دارد؛ smoke باید هر دو را لمس کند.</li>
+        <li><b>استفاده از API عمومی زیرسیستم (<code>SentimentClassifier</code>):</b> همان مسیری که کد production استفاده می‌کند، نه یک مسیر موازی ad-hoc.</li>
+        <li><b>اجرا از ریشهٔ مخزن با venv فعال:</b> وابستگی‌های سنگین sentiment فقط در محیط خودش معنی دارند.</li>
+      </ul>
+
+      <hr>
+      <p><b>۵. دستورات</b></p>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash"># از ریشهٔ مخزن، با venv زیرسیستم sentiment فعال
+python scripts/manual_sentiment_check.py
+</code></pre>
+
+    <div dir="rtl">
+      <p><b>پیش‌نیاز:</b> وابستگی‌های بستهٔ <code>sentiment</code> نصب و venv مربوطه فعال باشد. نیازی به Docker / Postgres / Kafka نیست.</p>
+      <hr>
+      <p><a href="script-run-tests-in-docker.html">← run_tests_in_docker.sh</a> · <a href="scripts.html">فهرست اسکریپت‌ها</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>Project Technical Documentation</footer>
+</body>
+</html>

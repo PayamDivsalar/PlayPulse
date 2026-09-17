@@ -90,21 +90,28 @@ hostname اشتباه به کانتینر می‌دهد.
 
 اسکریپت ابتدا `postgres` / `zookeeper` / `kafka` / `kafka-init` / `app-api`
 را بالا می‌آورد، منتظر healthy می‌ماند، بعد به ترتیب هر `*-tests` را با
-`docker compose --profile test run --rm` اجرا می‌کند، خلاصهٔ PASS/FAIL
-چاپ می‌کند و اگر حتی یک suite شکست بخورد با exit code غیرصفر تمام می‌شود.
-`sentiment-tests` به‌طور پیش‌فرض در اسکریپت نیست (بیلد ایمیج torch/مدل
-سنگین است)؛ در صورت نیاز جداگانه اجرا کنید.
+`docker compose --profile test run --rm` اجرا می‌کند، خلاصهٔ PASS/FAIL/SKIPPED
+چاپ می‌کند و اگر حتی یک suite واقعی شکست بخورد با exit code غیرصفر تمام
+می‌شود. `sentiment-*` داخل اسکریپت هست ولی اگر ایمیج
+`playpulse-sentiment:latest` از قبل ساخته نشده باشد SKIPPED می‌شود
+(اسکریپت عمداً cold-build نمی‌کند؛ بیلد با
+`docker compose --profile tools build sentiment`).
 
 اجرای تکی:
 
 ```bash
 docker compose --profile test run --rm crawler-tests
+docker compose --profile test run --rm crawler-tests-live
 docker compose --profile test run --rm network-analyzer-tests
+docker compose --profile test run --rm network-analyzer-tests-live
+docker compose --profile test run --rm network-analyzer-tests-oracle
 docker compose --profile test run --rm storage-consumer-tests
 docker compose --profile test run --rm storage-consumer-tests-integration
 docker compose --profile test run --rm app-api-tests
-# Optional / heavy (torch + HF model baked into the image):
+# Heavy (torch + HF model); build once via tools profile first:
+docker compose --profile tools build sentiment
 docker compose --profile test run --rm sentiment-tests
+docker compose --profile test run --rm sentiment-tests-integration
 ```
 
 ## تنظیمات runtime کراولر

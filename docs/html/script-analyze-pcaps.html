@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>analyze_pcaps.sh | مستندات اسکریپت‌ها</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">مستندات فنی پروژه</a>
+    <nav>
+      <a href="index.html">خانه</a>
+      <a href="application-registry.html">Application Registry</a>
+      <a href="database-schema.html">Database Schema</a>
+      <a href="infra-setup.html">Infrastructure</a>
+      <a href="crawler.html">Crawler</a>
+      <a href="storage-consumer.html">Storage Consumer</a>
+      <a href="sentiment.html">Sentiment</a>
+      <a class="active" href="scripts.html">Scripts</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">
+    <span class="eyebrow">SCRIPTS · NETWORK BATCH</span>
+    <h1>network/analyze_pcaps.sh — پردازش دسته‌ای PCAP</h1>
+  </div>
+
+  <article class="doc-content">
+    <div dir="rtl">
+      <p><a href="scripts.html">← بازگشت به فهرست اسکریپت‌ها</a></p>
+      <hr>
+
+      <p><b>مسیر فایل:</b> <code>scripts/network/analyze_pcaps.sh</code></p>
+
+      <hr>
+      <p><b>۱. کاراییش به زبان ساده</b></p>
+      <p align="justify">هر فایل capture داخل inbox را یکی‌یکی از طریق زیرسیستم Network Analyzer (<code>python -m network_analyzer.main</code>) رد می‌کند، سپس بر اساس کد خروج Analyzer فایل را جابه‌جا می‌کند: موفق → <code>processed/</code>؛ ورودی ردشده → <code>failed/</code> (+ فایل <code>.log</code>)؛ خطای قابل‌تلاش مجدد (مثل قطع بودن Kafka) → <b>همان‌جا در inbox می‌ماند</b> تا اجرای بعدی دوباره برداردش. همین مسیریابی، قلب ارزش اسکریپت است.</p>
+
+      <hr>
+      <p><b>۲. کجا در پروژه کلی استفاده می‌شود؟</b></p>
+      <ul>
+        <li>مسیر host-side برای batch روی <code>data/pcap/inbox</code> وقتی اپراتور captureهای PCAPdroid را می‌ریزد داخل فولدر.</li>
+        <li>معادل مفهومی سرویس Compose <code>network-analyzer</code> (پروفایل <code>tools</code>) که همان کار را داخل کانتینر انجام می‌دهد؛ <code>docker-compose.yml</code> صریحاً به این اسکریپت ارجاع می‌دهد.</li>
+        <li>پس از اجرا، معمولاً با <code>verify_network_metrics.sh</code> تأیید می‌شود که پیام‌ها روی تاپیک نشسته‌اند، و در نهایت Storage Consumer آن‌ها را به DB می‌برد.</li>
+        <li>به App Registry وابسته است مگر <code>--skip-registry-check</code> / <code>--dry-run</code>: نام بسته باید در فهرست اپ‌های تحت پایش باشد.</li>
+      </ul>
+
+      <hr>
+      <p><b>۳. چیکارا می‌کند؟</b></p>
+      <p><b>قرارداد نام فایل (اجباری برای تشخیص خودکار app و سناریو):</b></p>
+      <p style="direction:ltr;text-align:left"><code>&lt;package&gt;__&lt;upload|download&gt;__&lt;YYYYMMDDTHHMMSS&gt;.pcap</code></p>
+      <p>مثال: <code style="direction:ltr">com.whatsapp__upload__20260907T141500.pcap</code></p>
+
+      <p><b>مسیریابی بر اساس exit code Analyzer:</b></p>
+      <table>
+        <thead><tr><th>نتیجه</th><th>رفتار فایل</th><th>معنا</th></tr></thead>
+        <tbody>
+          <tr><td>موفق (<code>0</code>)</td><td>انتقال به <code>processed/</code></td><td>متریک‌ها محاسبه و (معمولاً) به Kafka منتشر شدند.</td></tr>
+          <tr><td>خطای transport / قابل retry (مثلاً <code>5</code>)</td><td>ماندن در inbox</td><td>بروکر یا وابستگی موقتاً در دسترس نیست؛ capture خوب است، quarantine نشود.</td></tr>
+          <tr><td>ورودی ردشده</td><td>انتقال به <code>failed/</code> + <code>.log</code></td><td>فایل خراب/نامعتبر؛ نباید forever retry شود.</td></tr>
+        </tbody>
+      </table>
+
+      <p>در پایان یک خلاصهٔ شمارش (analyzed / failed / retryable) چاپ می‌شود. Exit <code>0</code> فقط وقتی همه OK یا inbox خالی باشد؛ در غیر این صورت <code>1</code>.</p>
+
+      <hr>
+      <p><b>۴. تصمیمات معماری</b></p>
+      <ul>
+        <li><b>عمداً بدون <code>set -e</code>:</b> شکست یک فایل نباید کل batch را بکشد؛ مثل <code>check_infra</code> باید گزارش کامل بدهد.</li>
+        <li><b>تفکیک «خطای زیرساخت» از «خطای ورودی»:</b> بروکر قطع ≠ capture بد. بدون این تفکیک، یا فایل خوب quarantine می‌شود یا فایل بد تا ابد inbox را اشغال می‌کند.</li>
+        <li><b>متاداده در نام فایل:</b> بدون آرگومان per-file، Analyzer می‌فهمد package و upload/download چیست — قرارداد عملیاتی با PCAPdroid.</li>
+        <li><b><code>--dry-run</code> + <code>--skip-registry-check</code> + <code>--keep</code>:</b> مسیر دیباگ بدون دست زدن به Kafka، Registry و جابه‌جایی فایل.</li>
+        <li><b>دو مسیر اجرا (host script vs Compose service):</b> همان منطق؛ یکی برای توسعهٔ محلی با venv، یکی برای محیط Docker یکپارچه.</li>
+      </ul>
+
+      <hr>
+      <p><b>۵. دستورات</b></p>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash"># اجرای عادی روی data/pcap/inbox
+./scripts/network/analyze_pcaps.sh
+
+# فقط محاسبه، بدون Kafka / بدون جابه‌جایی فایل
+./scripts/network/analyze_pcaps.sh --dry-run --skip-registry-check --keep
+
+# inbox سفارشی
+./scripts/network/analyze_pcaps.sh --inbox ~/Downloads/PCAPdroid
+
+./scripts/network/analyze_pcaps.sh --help
+
+# معادل داخل Compose
+docker compose --profile tools run --rm network-analyzer
+</code></pre>
+
+    <div dir="rtl">
+      <p><b>پیش‌نیاز:</b> وابستگی‌های پایتون Analyzer نصب باشد (<code>network_analyzer/requirements.txt</code>). برای publish واقعی: Kafka و App API در دسترس، مگر فلگ‌های dry-run / skip-registry.</p>
+      <hr>
+      <p><a href="script-verify-network-metrics.html">← verify_network_metrics.sh</a> · <a href="scripts.html">فهرست اسکریپت‌ها</a> · <a href="script-finalize-cycle-reports.html">finalize_cycle_reports.py →</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>Project Technical Documentation</footer>
+</body>
+</html>
