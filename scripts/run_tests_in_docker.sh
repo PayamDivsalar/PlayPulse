@@ -3,24 +3,26 @@
 # =============================================================================
 # run_tests_in_docker.sh
 #
-# Bring up the shared Docker infrastructure (Postgres, Kafka, app-api), then
-# run every subsystem test service on the compose network via the ``test``
-# profile. Collects all exit codes and prints a PASS / FAIL / SKIPPED summary.
+# Bring up an *isolated* Docker test stack (Postgres, Kafka, app-api), then
+# run every subsystem test service via the ``test`` profile. Collects exit
+# codes and prints a PASS / FAIL / SKIPPED summary.
+#
+# Isolation (does not touch the live / prod compose stack):
+#   - COMPOSE_PROJECT_NAME=playpulse_test  → separate network + volumes
+#   - --env-file .env.test                 → not the live root .env
+#   - -f docker-compose.test.yml           → no fixed container names / host ports
 #
 # Usage (from repo root):
 #   ./scripts/run_tests_in_docker.sh
 #   ./scripts/run_tests_in_docker.sh --no-build
+#   ./scripts/run_tests_in_docker.sh --keep          # leave stack up after run
+#   ./scripts/run_tests_in_docker.sh --down          # teardown only
 #
-# Prerequisites: root .env present; Docker Engine + Compose plugin.
-#
-# Notes:
-#   - crawler-tests-live includes Play Store hits (outbound internet); Kafka /
-#     App API live cases in that suite still FAIL if the compose network is down.
-#   - network-analyzer-tests-live is compose-network only (never SKIPPED for
-#     "missing internet").
-#   - network-analyzer-tests-oracle needs tshark (Dockerfile.test).
-#   - sentiment-* is never cold-built by this script; if playpulse-sentiment:latest
-#     is missing, those rows are SKIPPED.
+# If .env.test is missing, it is created once from .env.test.example (never
+# overwritten). By default the playpulse_test stack (containers + volumes) is
+# torn down when the script exits — including after failures or an early abort
+# once infra was started. Use --keep to iterate without rebuilding infra.
+# Full guide: docs/docker-tests.md
 # =============================================================================
 
 set -uo pipefail
@@ -36,16 +38,21 @@ NC='\033[0m'
 # --- Paths -------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENV_FILE="$PROJECT_ROOT/.env"
+ENV_FILE="$PROJECT_ROOT/.env.test"
+ENV_EXAMPLE="$PROJECT_ROOT/.env.test.example"
+COMPOSE_FILE="$PROJECT_ROOT/docker-compose.yml"
+COMPOSE_TEST_FILE="$PROJECT_ROOT/docker-compose.test.yml"
+
+# Fixed project name: keeps test volumes/networks away from the live stack.
+COMPOSE_PROJECT="playpulse_test"
+SENTIMENT_IMAGE="playpulse-sentiment:latest"
 
 # --- Defaults ----------------------------------------------------------------
 NO_BUILD=false
-
-POSTGRES_CONTAINER="project_postgres"
-KAFKA_CONTAINER="project_kafka"
-APP_API_CONTAINER="project_app_api"
-KAFKA_INIT_CONTAINER="project_kafka_init"
-SENTIMENT_IMAGE="playpulse-sentiment:latest"
+DO_DOWN=false
+KEEP=false
+# Set true once a full test run has started infra (so EXIT tears it down).
+TEARDOWN_ON_EXIT=false
 
 # Full sequence (continue on failure; summary at the end).
 TEST_SERVICES=(
@@ -96,19 +103,31 @@ die() {
 }
 
 usage() {
-    cat <<'EOF'
-Run PlayPulse subsystem tests inside the Docker compose network.
+    cat <<EOF
+Run PlayPulse subsystem tests on an isolated Docker Compose project.
 
 Usage:
   ./scripts/run_tests_in_docker.sh [options]
 
 Options:
   --no-build   Reuse images already built (skip --build on compose up/run)
+  --keep       Leave the playpulse_test stack running after the run
+  --down       Tear down the playpulse_test stack (and volumes) and exit
   -h, --help   Show this help
 
-Starts postgres, zookeeper, kafka, kafka-init, and app-api, waits until they
-are ready, then runs each *-tests service with:
-  docker compose --profile test run --rm <service>
+By default the test stack is removed (containers + volumes) when this script
+exits. Use --keep for faster local re-runs, then --down when finished.
+
+If .env.test is missing, it is created from .env.test.example (never overwritten).
+
+Always uses:
+  project     ${COMPOSE_PROJECT}
+  env file    .env.test
+  compose     docker-compose.yml + docker-compose.test.yml
+
+This never uses the live root .env or fixed names like project_postgres.
+Do not run on a production host as a substitute for health checks — use
+scripts/infra/check_infra.sh there. See docs/docker-tests.md.
 
 Summary labels:
   PASS     suite exited 0
@@ -119,10 +138,16 @@ Summary labels:
 EOF
 }
 
+# Resolve a running (or recently created) container id for a compose service.
+service_cid() {
+    local service="$1"
+    "${COMPOSE[@]}" ps -aq "$service" 2>/dev/null | head -n1
+}
+
 wait_postgres() {
     local retries=30
-    print_info "Waiting for Postgres ($POSTGRES_CONTAINER)..."
-    until docker exec "$POSTGRES_CONTAINER" \
+    print_info "Waiting for Postgres (compose service postgres)..."
+    until "${COMPOSE[@]}" exec -T postgres \
         pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; do
         retries=$((retries - 1))
         [[ $retries -gt 0 ]] || return 1
@@ -133,8 +158,10 @@ wait_postgres() {
 
 wait_kafka() {
     local retries=45
-    print_info "Waiting for Kafka ($KAFKA_CONTAINER)..."
-    until docker exec "$KAFKA_CONTAINER" \
+    print_info "Waiting for Kafka (compose service kafka)..."
+    # Inside the broker container the host listener is still :9092 even when
+    # no host port is published (docker-compose.test.yml clears ports).
+    until "${COMPOSE[@]}" exec -T kafka \
         kafka-broker-api-versions --bootstrap-server localhost:9092 >/dev/null 2>&1; do
         retries=$((retries - 1))
         [[ $retries -gt 0 ]] || return 1
@@ -145,22 +172,33 @@ wait_kafka() {
 
 wait_kafka_init() {
     local retries=30
+    local cid=""
+    local status=""
+    local code=""
     print_info "Waiting for kafka-init to finish..."
-    until [[ "$(docker inspect -f '{{.State.Status}}' "$KAFKA_INIT_CONTAINER" 2>/dev/null || echo missing)" == "exited" ]]; do
+    until cid="$(service_cid kafka-init)" && [[ -n "$cid" ]]; do
         retries=$((retries - 1))
         [[ $retries -gt 0 ]] || return 1
         sleep 2
     done
-    local code
-    code="$(docker inspect -f '{{.State.ExitCode}}' "$KAFKA_INIT_CONTAINER")"
+    until [[ "$(docker inspect -f '{{.State.Status}}' "$cid" 2>/dev/null || echo missing)" == "exited" ]]; do
+        retries=$((retries - 1))
+        [[ $retries -gt 0 ]] || return 1
+        sleep 2
+        cid="$(service_cid kafka-init)"
+        [[ -n "$cid" ]] || return 1
+    done
+    code="$(docker inspect -f '{{.State.ExitCode}}' "$cid")"
     [[ "$code" == "0" ]] || return 1
     return 0
 }
 
 wait_app_api() {
     local retries=60
+    local cid=""
     print_info "Waiting for app-api health..."
-    until [[ "$(docker inspect -f '{{.State.Health.Status}}' "$APP_API_CONTAINER" 2>/dev/null || echo starting)" == "healthy" ]]; do
+    until cid="$(service_cid app-api)" && [[ -n "$cid" ]] \
+        && [[ "$(docker inspect -f '{{.State.Health.Status}}' "$cid" 2>/dev/null || echo starting)" == "healthy" ]]; do
         retries=$((retries - 1))
         [[ $retries -gt 0 ]] || return 1
         sleep 2
@@ -185,12 +223,10 @@ is_oracle_service() {
     [[ "$1" == "network-analyzer-tests-oracle" ]]
 }
 
-# Shared tag with tools-profile ``sentiment`` (see compose ``image:``).
 sentiment_image_ready() {
     docker image inspect "$SENTIMENT_IMAGE" >/dev/null 2>&1
 }
 
-# True when the failure looks like Play Store egress/DNS, not Kafka/App API.
 log_looks_like_missing_play_store() {
     local log="$1"
     grep -qiE 'google_play_scraper|play\.google\.com|googleapis\.com' "$log" \
@@ -202,7 +238,6 @@ log_looks_like_missing_play_store() {
 
 log_looks_like_missing_tshark() {
     local log="$1"
-    # unittest.skipUnless → pytest "skipped"; or binary missing at runtime.
     grep -qiE \
         'tshark is not installed|skipped.*tshark|tshark: not found|No such file or directory: .*tshark|executable.*tshark' \
         "$log" \
@@ -220,8 +255,6 @@ record_result() {
 classify_and_record() {
     local service="$1" code="$2" log="$3"
     if [[ $code -eq 0 ]]; then
-        # Oracle suite may exit 0 with every test skipped when tshark is absent
-        # (e.g. wrong image). Dockerfile.test normally has tshark.
         if is_oracle_service "$service" && log_looks_like_missing_tshark "$log"; then
             record_result "$service" "$code" "SKIPPED" "requires tshark"
             print_skip "$service — requires tshark"
@@ -252,7 +285,6 @@ run_suite() {
     local run_build_flag=()
     print_info "Running $service..."
     if is_sentiment_service "$service"; then
-        # Never cold-build torch/HF here — operator must supply the image.
         if ! sentiment_image_ready; then
             record_result "$service" -1 "SKIPPED" \
                 "sentiment image not built (skip cold build)"
@@ -271,11 +303,33 @@ run_suite() {
     rm -f "$log"
 }
 
+down_test_stack() {
+    print_header "Teardown"
+    print_info "Stopping project ${COMPOSE_PROJECT} (including volumes)..."
+    "${COMPOSE[@]}" --profile test down -v --remove-orphans
+    print_ok "Test stack removed (volumes deleted)."
+}
+
+# Tear down on any exit after infra was started, unless --keep.
+# Preserves the script's exit code (PASS/FAIL summary or die()).
+cleanup_on_exit() {
+    local ec=$?
+    trap - EXIT
+    if [[ "$KEEP" != true && "$TEARDOWN_ON_EXIT" == true ]]; then
+        down_test_stack || true
+    elif [[ "$KEEP" == true && "$TEARDOWN_ON_EXIT" == true ]]; then
+        print_info "Leaving playpulse_test running (--keep). Tear down later with: ./scripts/run_tests_in_docker.sh --down"
+    fi
+    exit "$ec"
+}
+
 # --- Args --------------------------------------------------------------------
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --no-build) NO_BUILD=true; shift ;;
+        --keep) KEEP=true; shift ;;
+        --down) DO_DOWN=true; shift ;;
         -h|--help) usage; exit 0 ;;
         *) die "Unknown option: $1 (try --help)" ;;
     esac
@@ -283,8 +337,13 @@ done
 
 cd "$PROJECT_ROOT"
 
+[[ -f "$COMPOSE_FILE" ]] || die "Missing $COMPOSE_FILE"
+[[ -f "$COMPOSE_TEST_FILE" ]] || die "Missing $COMPOSE_TEST_FILE"
+
 if [[ ! -f "$ENV_FILE" ]]; then
-    die "Missing $ENV_FILE — copy .env.example to .env first."
+    [[ -f "$ENV_EXAMPLE" ]] || die "Missing $ENV_EXAMPLE — cannot create .env.test."
+    cp "$ENV_EXAMPLE" "$ENV_FILE"
+    print_info "Created .env.test from .env.test.example (existing file is never overwritten)."
 fi
 
 # shellcheck disable=SC1090
@@ -292,18 +351,43 @@ set -a
 source "$ENV_FILE"
 set +a
 
-COMPOSE=(docker compose)
+: "${POSTGRES_USER:?POSTGRES_USER must be set in .env.test}"
+: "${POSTGRES_DB:?POSTGRES_DB must be set in .env.test}"
+
+COMPOSE=(
+    docker compose
+    -p "$COMPOSE_PROJECT"
+    --env-file "$ENV_FILE"
+    -f "$COMPOSE_FILE"
+    -f "$COMPOSE_TEST_FILE"
+)
+
 BUILD_FLAG=()
 if [[ "$NO_BUILD" != true ]]; then
     BUILD_FLAG=(--build)
 fi
 
+if [[ "$DO_DOWN" == true ]]; then
+    if [[ "$KEEP" == true ]]; then
+        die "Cannot combine --down and --keep"
+    fi
+    down_test_stack
+    exit 0
+fi
+
 echo -e "${BLUE}"
 echo "╔══════════════════════════════════════════════╗"
-echo "║     PlayPulse tests (Docker network)         ║"
+echo "║     PlayPulse tests (isolated Docker)        ║"
 echo "╚══════════════════════════════════════════════╝"
 echo -e "${NC}"
 
+print_info "Compose project: ${COMPOSE_PROJECT} (not the live stack)"
+print_info "Env file: .env.test"
+if [[ "$KEEP" == true ]]; then
+    print_info "Stack will be left running after the run (--keep)."
+else
+    print_info "Stack will be torn down automatically when this script exits."
+fi
 print_info "crawler-tests-live: Play Store needs outbound internet."
 print_info "network-analyzer-tests-live: Kafka/App API on compose network only."
 print_info "network-analyzer-tests-oracle needs tshark (Dockerfile.test)."
@@ -314,7 +398,11 @@ print_info "sentiment-* skipped unless ${SENTIMENT_IMAGE} exists."
 # =============================================================================
 print_header "Infrastructure"
 
-print_info "Starting postgres zookeeper kafka kafka-init app-api..."
+# From here on, EXIT tears the test stack down (unless --keep).
+TEARDOWN_ON_EXIT=true
+trap cleanup_on_exit EXIT
+
+print_info "Starting postgres zookeeper kafka app-api..."
 "${COMPOSE[@]}" up -d "${BUILD_FLAG[@]}" \
     postgres zookeeper kafka app-api
 
@@ -326,25 +414,25 @@ print_info "Recreating kafka-init..."
 if wait_postgres; then
     print_ok "Postgres is ready."
 else
-    die "Postgres did not become ready. Check: docker compose logs postgres"
+    die "Postgres did not become ready. Check: docker compose -p ${COMPOSE_PROJECT} logs postgres"
 fi
 
 if wait_kafka; then
     print_ok "Kafka is ready."
 else
-    die "Kafka did not become ready. Check: docker compose logs kafka"
+    die "Kafka did not become ready. Check: docker compose -p ${COMPOSE_PROJECT} logs kafka"
 fi
 
 if wait_kafka_init; then
     print_ok "kafka-init finished successfully."
 else
-    die "kafka-init failed. Check: docker compose logs kafka-init"
+    die "kafka-init failed. Check: docker compose -p ${COMPOSE_PROJECT} logs kafka-init"
 fi
 
 if wait_app_api; then
     print_ok "app-api is healthy."
 else
-    die "app-api did not become healthy. Check: docker compose logs app-api"
+    die "app-api did not become healthy. Check: docker compose -p ${COMPOSE_PROJECT} logs app-api"
 fi
 
 # =============================================================================

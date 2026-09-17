@@ -1,0 +1,67 @@
+# =============================================================================
+# docker-compose.test.yml
+#
+# Override used ONLY by scripts/run_tests_in_docker.sh (never by bring_up /
+# Ansible). Paired with COMPOSE_PROJECT_NAME=playpulse_test and .env.test so
+# the test stack cannot share containers, host ports, or volumes with the
+# live stack (which uses fixed names like project_postgres and .env).
+#
+# What this file does:
+#   - Clears container_name so Compose can prefix names with the project
+#   - Clears published ports (tests talk on the internal network only)
+#   - Sets restart: "no" so a leftover test stack does not come back on reboot
+#
+# See docs/docker-tests.md.
+# =============================================================================
+
+services:
+
+  postgres:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+
+  zookeeper:
+    container_name: !reset null
+    restart: "no"
+
+  kafka:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+
+  kafka-init:
+    container_name: !reset null
+
+  kafka-ui:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+
+  crawler:
+    container_name: !reset null
+    restart: "no"
+
+  app-api:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
+
+  storage-consumer:
+    container_name: !reset null
+    restart: "no"
+
+  network-analyzer:
+    container_name: !reset null
+
+  sentiment:
+    container_name: !reset null
+
+  cycle-reporter:
+    container_name: !reset null
+    restart: "no"
+
+  metabase:
+    container_name: !reset null
+    ports: !reset []
+    restart: "no"
