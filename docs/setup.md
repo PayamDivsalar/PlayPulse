@@ -75,44 +75,26 @@ hostname اشتباه به کانتینر می‌دهد.
 
 ## اجرای تست‌ها داخل Docker
 
-سرویس‌های `*-tests` پشت پروفایل composeی `test` هستند تا
-`docker compose up` یا `docker compose --profile tools up` آن‌ها را بالا
-نیاورند. تست‌ها روی همان شبکهٔ داخلی اجرا می‌شوند (`postgres`،
-`kafka:29092`، `app-api:8000`) نه از venv با `localhost`.
-
-یک‌جا همه را اجرا کنید:
+راهنمای کامل ایزوله‌سازی (پروژهٔ `playpulse_test`، فایل `.env.test`، و
+اینکه چرا به استک live/prod دست نمی‌زند) در
+[`docs/docker-tests.md`](docker-tests.md) است. خلاصه:
 
 ```bash
-./scripts/run_tests_in_docker.sh
-# یا بدون rebuild:
+./scripts/run_tests_in_docker.sh          # در صورت نبود، .env.test را از example می‌سازد
 ./scripts/run_tests_in_docker.sh --no-build
+./scripts/run_tests_in_docker.sh --keep    # استک تست را برای تکرار سریع نگه دار
+./scripts/run_tests_in_docker.sh --down    # فقط teardown (اگر با --keep مانده)
 ```
 
-اسکریپت ابتدا `postgres` / `zookeeper` / `kafka` / `kafka-init` / `app-api`
-را بالا می‌آورد، منتظر healthy می‌ماند، بعد به ترتیب هر `*-tests` را با
-`docker compose --profile test run --rm` اجرا می‌کند، خلاصهٔ PASS/FAIL/SKIPPED
-چاپ می‌کند و اگر حتی یک suite واقعی شکست بخورد با exit code غیرصفر تمام
-می‌شود. `sentiment-*` داخل اسکریپت هست ولی اگر ایمیج
-`playpulse-sentiment:latest` از قبل ساخته نشده باشد SKIPPED می‌شود
-(اسکریپت عمداً cold-build نمی‌کند؛ بیلد با
-`docker compose --profile tools build sentiment`).
+اسکریپت همیشه با `COMPOSE_PROJECT_NAME=playpulse_test` و
+`docker-compose.test.yml` اجرا می‌شود؛ root `.env` و کانتینرهای
+`project_postgres` و … را لمس نمی‌کند. در پایان (موفق یا ناموفق)
+استک تست را خودش پایین می‌آورد مگر `--keep`. روی سرور production فقط
+`check_infra.sh` / Ansible — نه این تست‌رانر.
 
-اجرای تکی:
-
-```bash
-docker compose --profile test run --rm crawler-tests
-docker compose --profile test run --rm crawler-tests-live
-docker compose --profile test run --rm network-analyzer-tests
-docker compose --profile test run --rm network-analyzer-tests-live
-docker compose --profile test run --rm network-analyzer-tests-oracle
-docker compose --profile test run --rm storage-consumer-tests
-docker compose --profile test run --rm storage-consumer-tests-integration
-docker compose --profile test run --rm app-api-tests
-# Heavy (torch + HF model); build once via tools profile first:
-docker compose --profile tools build sentiment
-docker compose --profile test run --rm sentiment-tests
-docker compose --profile test run --rm sentiment-tests-integration
-```
+سرویس‌های `*-tests` پشت پروفایل `test` هستند. `sentiment-*` اگر ایمیج
+`playpulse-sentiment:latest` نباشد SKIPPED می‌شود
+(`docker compose --profile tools build sentiment`).
 
 ## تنظیمات runtime کراولر
 

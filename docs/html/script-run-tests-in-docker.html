@@ -29,7 +29,7 @@
 <main class="page">
   <div class="page-title">
     <span class="eyebrow">SCRIPTS · DOCKER TEST RUNNER</span>
-    <h1>run_tests_in_docker.sh — اجرای یکپارچهٔ تست‌ها در Docker</h1>
+    <h1>run_tests_in_docker.sh — تست‌های ایزوله در Docker</h1>
   </div>
 
   <article class="doc-content">
@@ -38,35 +38,65 @@
       <hr>
 
       <p><b>مسیر فایل:</b> <code>scripts/run_tests_in_docker.sh</code></p>
+      <p><b>راهنمای تکمیلی (انگلیسی):</b> <code>docs/docker-tests.md</code></p>
 
       <hr>
       <p><b>۱. کاراییش به زبان ساده</b></p>
-      <p align="justify">زیرساخت مشترک تست (Postgres، Kafka، app-api) را بالا می‌آورد، منتظر آمادگی‌شان می‌ماند، سپس تمام سرویس‌های تست تعریف‌شده در Compose با پروفایل <code>test</code> را یکی‌یکی با <code>docker compose run</code> اجرا می‌کند. در پایان یک جدول خلاصه با برچسب‌های <b>PASS</b> / <b>FAIL</b> / <b>SKIPPED</b> چاپ می‌کند و exit code کلی را بر اساس شکست‌های واقعی تنظیم می‌کند — بدون اینکه اولین تستِ شکست‌خورده بقیه را قطع کند.</p>
+      <p align="justify">یک <b>استک تست جدا</b> از استک live/production بالا می‌آورد (Postgres، Kafka، app-api)، منتظر آمادگی‌شان می‌ماند، سپس تمام سرویس‌های <code>*-tests</code> با پروفایل Composeی <code>test</code> را یکی‌یکی اجرا می‌کند، جدول خلاصهٔ <b>PASS</b> / <b>FAIL</b> / <b>SKIPPED</b> چاپ می‌کند، و در پایان (به‌صورت پیش‌فرض) همان استک تست را با volumeهایش پایین می‌آورد. به root <code>.env</code>، volumeهای live، و کانتینرهایی مثل <code>project_postgres</code> دست نمی‌زند.</p>
 
       <hr>
       <p><b>۲. کجا در پروژه کلی استفاده می‌شود؟</b></p>
       <ul>
-        <li>راه استاندارد اجرای «همهٔ سوئیت‌های زیرسیستم» روی یک ماشین/CI که Docker دارد، بدون نصب دستی ده‌ها venv.</li>
-        <li>متصل به تعریف سرویس‌های <code>*-tests</code> در <code>docker-compose.yml</code> (پروفایل <code>test</code>).</li>
-        <li>مکمل تست‌های unit محلی هر زیرسیستم: اینجا تمرکز روی اجرای یکنواخت داخل شبکهٔ Compose است.</li>
-        <li>برای developerهایی که می‌خواهند قبل از PR ببینند آیا live/oracle/integrationها هم سبزند.</li>
+        <li>راه استاندارد اجرای «همهٔ سوئیت‌های زیرسیستم» روی ماشین developer یا CI.</li>
+        <li>متصل به سرویس‌های <code>*-tests</code> در <code>docker-compose.yml</code> (پروفایل <code>test</code>) به‌همراه override ایزوله‌سازی در <code>docker-compose.test.yml</code>.</li>
+        <li>مکمل تست unit محلی؛ اینجا تمرکز روی شبکهٔ Compose و integration واقعی در محیط disposable است.</li>
+        <li><b>نه</b> برای healthcheck سرور production — آنجا <code>bring_up.sh</code> + <code>check_infra.sh</code> (و Ansible) کافی است.</li>
       </ul>
 
       <hr>
-      <p><b>۳. چیکارا می‌کند؟</b></p>
+      <p><b>۳. ایزوله‌سازی از استک live (رویکرد جدید)</b></p>
+      <p align="justify">قبلاً اسکریپت همان پروژهٔ Compose و همان <code>.env</code> ریشه را لمس می‌کرد و می‌توانست به دادهٔ واقعی بنویسد. الان سه قطعه همیشه با هم استفاده می‌شوند:</p>
+      <table>
+        <thead><tr><th>قطعه</th><th>نقش</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>COMPOSE_PROJECT_NAME=playpulse_test</code><br>(فلگ <code>-p playpulse_test</code>)</td>
+            <td>شبکه و volume جدا (مثلاً <code>playpulse_test_postgres_data</code>)؛ موازی با استک live روی یک ماشین ممکن است.</td>
+          </tr>
+          <tr>
+            <td><code>.env.test</code></td>
+            <td>جایگزین متغیرها فقط برای استک تست — نه root <code>.env</code> که <code>bring_up</code> / Ansible استفاده می‌کند. از <code>.env.test.example</code> کپی کنید (gitignore شده).</td>
+          </tr>
+          <tr>
+            <td><code>docker-compose.test.yml</code></td>
+            <td><code>container_name</code> ثابت‌ها (مثل <code>project_postgres</code>) و پورت‌های publish‌شده روی host را پاک می‌کند تا با استک live برخورد نکند؛ <code>restart: "no"</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p align="justify">تعریف سرویس‌ها همان <code>docker-compose.yml</code> است؛ کپی دوم از کل استک یا Testcontainers لازم نیست.</p>
+
+      <hr>
+      <p><b>۴. چیکارا می‌کند؟ (جریان اجرا از اول تا آخر)</b></p>
       <ol>
-        <li>وجود <code>.env</code> ریشه و Docker/Compose را چک می‌کند.</li>
-        <li>سرویس‌های مشترک را up می‌کند و wait می‌زند: Postgres، Kafka، اتمام موفق <code>kafka-init</code>، healthy بودن app-api.</li>
-        <li>به ترتیب سرویس‌های تست را اجرا می‌کند، از جمله (میان موارد دیگر):
+        <li><b>پیش‌نیاز:</b> وجود <code>docker-compose.yml</code> و <code>docker-compose.test.yml</code>. اگر <code>.env.test</code> نباشد، یک‌بار از <code>.env.test.example</code> ساخته می‌شود (هرگز overwrite نمی‌کند).</li>
+        <li><b>دستور Compose ثابت:</b>
+          <code>docker compose -p playpulse_test --env-file .env.test -f docker-compose.yml -f docker-compose.test.yml</code>
+        </li>
+        <li><b>زیرساخت تست:</b> <code>up -d</code> برای <code>postgres</code>، <code>zookeeper</code>، <code>kafka</code>، <code>app-api</code>؛ سپس <code>kafka-init</code> با <code>--force-recreate</code> تا topicها ساخته شوند.</li>
+        <li><b>Wait:</b> آمادگی Postgres، Kafka، خروج موفق kafka-init، healthy بودن app-api — همه از طریق همان پروژهٔ <code>playpulse_test</code> (نه نام‌های live).</li>
+        <li><b>از این نقطه:</b> trap روی EXIT فعال است تا در پایان (یا abort) استک تست پاک شود مگر <code>--keep</code>.</li>
+        <li><b>سوئیت‌ها به‌ترتیب</b> (شکست یکی بقیه را قطع نمی‌کند):
           <ul>
             <li><code>app-api-tests</code></li>
-            <li><code>crawler-tests</code> و <code>crawler-tests-live</code> (live به Play Store واقعی می‌زند)</li>
-            <li><code>network-analyzer-tests</code>، <code>-live</code>، <code>-oracle</code> (oracle به tshark نیاز دارد)</li>
+            <li><code>crawler-tests</code> و <code>crawler-tests-live</code> (بخش Play Store اینترنت خروجی می‌خواهد)</li>
+            <li><code>network-analyzer-tests</code>، <code>-live</code>، <code>-oracle</code> (oracle به tshark / <code>Dockerfile.test</code>)</li>
             <li><code>storage-consumer-tests</code> و <code>-integration</code></li>
-            <li><code>sentiment-tests</code> و <code>-integration</code></li>
+            <li><code>sentiment-tests</code> و <code>-integration</code> (اگر <code>playpulse-sentiment:latest</code> نباشد → SKIPPED؛ cold-build نمی‌کند)</li>
           </ul>
         </li>
-        <li>خلاصهٔ نتایج را چاپ می‌کند.</li>
+        <li>هر سوئیت با <code>compose --profile test run --rm</code> روی همان شبکهٔ تست اجرا می‌شود؛ خروجی tee می‌شود و برچسب می‌گیرد.</li>
+        <li><b>خلاصه</b> PASS/FAIL/SKIPPED چاپ می‌شود.</li>
+        <li><b>Teardown خودکار:</b> مگر با <code>--keep</code>، کانتینرها و volumeهای <code>playpulse_test</code> حذف می‌شوند. exit code بر اساس FAIL واقعی است (SKIPPED کل run را قرمز نمی‌کند).</li>
       </ol>
 
       <p><b>برچسب‌های خلاصه:</b></p>
@@ -75,36 +105,55 @@
         <tbody>
           <tr><td>PASS</td><td>سوئیت با exit 0 تمام شد.</td></tr>
           <tr><td>FAIL</td><td>شکست واقعی تست/اجرا.</td></tr>
-          <tr><td>SKIPPED</td><td>پیش‌نیاز خارجی نیست: اینترنت خروجی فقط برای Play Store داخل <code>crawler-tests-live</code>؛ tshark برای oracle؛ یا image مربوط به sentiment از قبل build نشده — این اسکریپت عمداً sentiment را cold-build نمی‌کند. <code>network-analyzer-tests-live</code> فقط Kafka/App API روی شبکهٔ Compose است و برای «نبود اینترنت» SKIPPED نمی‌شود.</td></tr>
+          <tr><td>SKIPPED</td><td>پیش‌نیاز خارجی: اینترنت برای Play Store فقط در <code>crawler-tests-live</code>؛ tshark برای oracle؛ یا نبود image مربوط به sentiment. <code>network-analyzer-tests-live</code> فقط Kafka/App API روی شبکهٔ Compose است و برای «نبود اینترنت» SKIPPED نمی‌شود.</td></tr>
         </tbody>
       </table>
 
       <hr>
-      <p><b>۴. تصمیمات معماری</b></p>
+      <p><b>۵. تصمیمات معماری</b></p>
       <ul>
-        <li><b>ادامه بعد از شکست:</b> مثل smokeهای ops، می‌خواهیم ببینیم «کدام سوئیت‌ها» شکستند نه فقط اولین‌شان.</li>
-        <li><b>زیرساخت مشترک یک‌بار:</b> هر سوئیت جداگانه Postgres/Kafka بالا نیاورد؛ زمان و flakiness کمتر می‌شود.</li>
-        <li><b>تفکیک SKIPPED از FAIL:</b> نبود اینترنت یا image سنگین sentiment نباید کل pipeline را قرمز معنایی کند؛ سیگنال «تست خراب است» باید تمیز بماند.</li>
-        <li><b>عدم cold-build sentiment:</b> image مدل سنگین است؛ مجبور کردن هر developer به build سرد، هزینهٔ نامتناسب می‌سازد. اگر image نباشد → SKIPPED.</li>
-        <li><b><code>--no-build</code>:</b> برای تکرار سریع وقتی imageها از قبل آماده‌اند.</li>
-        <li><b>پروفایل Compose <code>test</code>:</b> سرویس‌های تست وارد استک production روزمره نمی‌شوند مگر عمداً با این اسکریپت/پروفایل.</li>
+        <li><b>ایزوله به‌جای Testcontainers:</b> همان Compose پروژه حفظ می‌شود؛ فقط پروژه/env/override جدا — ساده‌تر و هم‌شکل production.</li>
+        <li><b>عدم لمس دادهٔ live:</b> integrationها فقط روی Postgres/Kafka تست می‌نویسند؛ بعد از run پیش‌فرض همه پاک می‌شود.</li>
+        <li><b>Teardown پیش‌فرض + <code>--keep</code>:</b> رفتار امن برای CI و عادت روزمره؛ برای دیباگ تکراری می‌توان استک را نگه داشت و بعد با <code>--down</code> بست.</li>
+        <li><b>ادامه بعد از شکست:</b> می‌خواهیم ببینیم کدام سوئیت‌ها شکستند، نه فقط اولین‌شان.</li>
+        <li><b>تفکیک SKIPPED از FAIL:</b> نبود اینترنت یا image سنگین sentiment سیگنال «کد خراب است» را آلوده نکند.</li>
+        <li><b>پروفایل <code>test</code>:</b> سرویس‌های تست با <code>bring_up</code> / استک روزمره بالا نمی‌آیند.</li>
+        <li><b>جدا از Ansible deploy:</b> playbook فقط bring_up + check_infra؛ این اسکریپت عمداً در deploy نیست.</li>
       </ul>
 
       <hr>
-      <p><b>۵. دستورات</b></p>
+      <p><b>۶. دستورات</b></p>
     </div>
 
-<pre class="sourceCode bash"><code class="sourceCode bash"># از ریشهٔ مخزن؛ نیاز به .env
+<pre class="sourceCode bash"><code class="sourceCode bash"># اجرای کامل (.env.test در صورت نبود از example ساخته می‌شود؛
+# در پایان استک تست خودکار down می‌شود)
 ./scripts/run_tests_in_docker.sh
 
 # بدون rebuild imageها
 ./scripts/run_tests_in_docker.sh --no-build
 
+# نگه داشتن استک برای تکرار سریع، سپس teardown دستی
+./scripts/run_tests_in_docker.sh --keep
+./scripts/run_tests_in_docker.sh --no-build --keep
+./scripts/run_tests_in_docker.sh --down
+
 ./scripts/run_tests_in_docker.sh --help
+
+# اختیاری: اگر می‌خواهید سوئیت sentiment اجرا شود (نه SKIPPED)
+docker compose --profile tools build sentiment
 </code></pre>
 
     <div dir="rtl">
-      <p><b>پیش‌نیاز:</b> فایل <code>.env</code> ریشه؛ Docker Engine + پلاگین Compose. برای liveها: اینترنت خروجی. برای oracle: image با tshark. برای sentiment: image از قبل ساخته‌شده.</p>
+      <p><b>پیش‌نیاز:</b> Docker Engine + پلاگین Compose؛ فایل <code>.env.test</code>؛ برای Play Store در live: اینترنت خروجی؛ برای oracle: image با tshark؛ برای sentiment: image از قبل ساخته‌شده.</p>
+      <p><b>تأیید ایزوله بودن (هنگام اجرا با <code>--keep</code>):</b></p>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash">docker compose -p playpulse_test ps
+docker volume ls | grep playpulse_test
+# نباید project_postgres مربوط به استک live را برای این run ببینید
+</code></pre>
+
+    <div dir="rtl">
       <hr>
       <p><a href="script-finalize-cycle-reports.html">← finalize_cycle_reports.py</a> · <a href="scripts.html">فهرست اسکریپت‌ها</a> · <a href="script-manual-sentiment-check.html">manual_sentiment_check.py →</a></p>
     </div>
