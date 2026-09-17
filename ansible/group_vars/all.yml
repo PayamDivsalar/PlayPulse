@@ -25,3 +25,10 @@ metabase_port: 3000
 # Off by default, same as scripts/bring_up.sh without --with-cycle-reports.
 crawler_cycle_reports_enabled: false
 crawler_cycle_reports_dir: "/data/reports"
+
+# --- Optional isolated docker tests before bring_up -------------------------
+# Off by default: a normal deploy must not automatically run the full suite.
+# Enable consciously per run, e.g.:
+#   ansible-playbook ... -e "run_tests_before_deploy=true"
+# Uses scripts/run_tests_in_docker.sh (playpulse_test; does not touch live .env).
+run_tests_before_deploy: false

@@ -19,8 +19,10 @@
       <a href="database-schema.html">Database Schema</a>
       <a href="infra-setup.html">Infrastructure</a>
       <a href="crawler.html">Crawler</a>
+      <a href="network-analyzer.html">Network Analyzer</a>
       <a href="storage-consumer.html">Storage Consumer</a>
       <a href="sentiment.html">Sentiment</a>
+      <a href="ansible.html">Ansible</a>
       <a class="active" href="scripts.html">Scripts</a>
     </nav>
   </div>
@@ -29,7 +31,7 @@
 <main class="page">
   <div class="page-title">
     <span class="eyebrow">SCRIPTS · BOOTSTRAP</span>
-    <h1>bring_up.sh — راه‌اندازی یک‌دسته‌ای استک</h1>
+    <h1>bring_up.sh — راه‌اندازی مرحله‌ای استک</h1>
   </div>
 
   <article class="doc-content">
@@ -41,52 +43,94 @@
 
       <hr>
       <p><b>۱. کاراییش به زبان ساده</b></p>
-      <p align="justify">این اسکریپت همان دکمهٔ «پروژه را برایم بالا بیاور» است. روی ماشین تازه یا سرور نصب‌شده اجرا می‌شود، فایل‌های محیطی گم‌شده را از نمونه‌ها می‌سازد (بدون بازنویسی فایل‌های موجود)، اعتبارنامه‌های خالی Postgres را پر می‌کند، کل Docker Compose را بالا می‌آورد، منتظر می‌ماند تا سرویس‌ها واقعاً قابل استفاده شوند، و در پایان Smoke Test زیرساخت (<code>check_infra.sh</code>) را اجرا می‌کند. نصب Docker روی سیستم‌عامل را انجام نمی‌دهد؛ آن کار عمداً به اپراتور یا Ansible سپرده شده است.</p>
+      <p align="justify">این اسکریپت همان دکمهٔ «پروژه را برایم بالا بیاور» است؛ ولی دیگر همه‌چیز را با یک <code>docker compose up -d</code> واحد روشن نمی‌کند. روی ماشین تازه یا سرور نصب‌شده اجرا می‌شود، فایل‌های محیطی گم‌شده را از نمونه‌ها می‌سازد (بدون بازنویسی فایل‌های موجود)، اعتبارنامه‌های خالی Postgres را پر می‌کند، سپس استک را <b>مرحله‌به‌مرحله</b> بالا می‌آورد: اول زیرساخت، بعد فقط <code>app-api</code>، بعد ثبت اپ‌های اولیه با <a href="script-seed-apps.html"><code>seed_apps.sh</code></a>، و در نهایت بقیهٔ سرویس‌های پیش‌فرض (از جمله <code>crawler</code> و <code>storage-consumer</code>). هدف این ترتیب این است که <b>اولین چرخهٔ crawl با لیست اپ‌های ازپیش‌ثبت‌شده شروع شود، نه با دیتابیس خالی</b>. در پایان، مگر با <code>--skip-check</code>، Smoke Test زیرساخت (<code>check_infra.sh</code>) را اجرا می‌کند. نصب Docker روی سیستم‌عامل را انجام نمی‌دهد؛ آن کار عمداً به اپراتور یا Ansible سپرده شده است.</p>
 
       <hr>
       <p><b>۲. کجا در پروژه کلی استفاده می‌شود؟</b></p>
       <ul>
-        <li>نقطهٔ ورود توصیه‌شده برای <b>راه‌اندازی اولیه</b> و <b>بالا آوردن روزمرهٔ استک</b> (طبق <code>docs/setup.md</code> و <code>scripts/README.md</code>).</li>
-        <li>جایگزین فراخوانی دستی و پراکندهٔ <code>docker compose up</code> برای اپراتورهایی که می‌خواهند env، wait و smoke check یک‌جا انجام شود.</li>
+        <li>نقطهٔ ورود توصیه‌شده برای <b>راه‌اندازی اولیه</b> و <b>بالا آوردن روزمرهٔ استک</b> (طبق <code>docs/setup.md</code> و فهرست اسکریپت‌ها).</li>
+        <li>همان اسکریپتی که نقش <code>deploy</code> در Ansible صدا می‌زند (<code>./scripts/bring_up.sh --skip-check</code>)؛ بنابراین ترتیب seed قبل از crawler روی سرور هم اعمال می‌شود.</li>
+        <li>جایگزین فراخوانی دستی و پراکندهٔ <code>docker compose up</code> برای اپراتورهایی که می‌خواهند env، wait، seed و smoke check یک‌جا انجام شود.</li>
         <li>با فلگ <code>--with-cycle-reports</code> سرویس Compose به نام <code>cycle-reporter</code> را هم فعال می‌کند که داخلش <code>finalize_cycle_reports.py</code> در حلقه اجرا می‌شود.</li>
-        <li>با فلگ <code>--infra-only</code> فقط لایهٔ داده و ابزارهای کمکی را بالا می‌آورد تا توسعهٔ host/venv روی App API و Crawler ممکن باشد.</li>
+        <li>با فلگ <code>--infra-only</code> فقط لایهٔ داده و ابزارهای کمکی را بالا می‌آورد (بدون app-api / seed / crawler) تا توسعهٔ host/venv روی App API و Crawler ممکن باشد.</li>
         <li>نیمهٔ Shell از «نصب و راه‌اندازی» است؛ نیمهٔ Ansible در پوشهٔ <code>ansible/</code> عمداً جدا مانده و اینجا صدا زده نمی‌شود.</li>
       </ul>
 
       <hr>
-      <p><b>۳. چیکارا می‌کند؟ (مراحل اجرا)</b></p>
-      <ol>
-        <li><b>پیش‌نیازها:</b> وجود <code>docker</code> و پلاگین Compose روی PATH، و در دسترس بودن daemon داکر.</li>
-        <li><b>فایل‌های .env:</b> اگر <code>.env</code> ریشه و envهای زیرسیستم‌ها نباشند، از <code>*.env.example</code> کپی می‌شوند؛ هرگز روی فایل موجود overwrite نمی‌کند.</li>
-        <li><b>اعتبارنامهٔ Postgres:</b> اگر <code>POSTGRES_DB</code> / <code>USER</code> / <code>PASSWORD</code> خالی باشند، مقادیر معقول (و برای پسورد، تصادفی) می‌نویسد و همان را به envهای host-side مربوط به <code>app_api</code> و <code>storage_consumer</code> آینه می‌کند تا mismatch رخ ندهد.</li>
-        <li><b>Compose up:</b>
-          <ul>
-            <li>حالت کامل: infra (<code>postgres</code>، <code>zookeeper</code>، <code>kafka</code>، <code>kafka-init</code>، <code>kafka-ui</code>، <code>metabase</code>) + اپ‌ها (<code>app-api</code>، <code>storage-consumer</code>، <code>crawler</code>) و با پروفایل <code>tools</code> یک‌بار <code>network-analyzer</code>.</li>
-            <li>حالت <code>--infra-only</code>: فقط مجموعهٔ infra بالا.</li>
-          </ul>
-        </li>
-        <li><b>انتظار آمادگی:</b> Postgres، Kafka، App API، Storage Consumer؛ همچنین اطمینان از وجود دیتابیس <code>metabase_app_db</code> (idempotent؛ برای volumeهایی که قبل از init ساخته شده‌اند).</li>
-        <li><b>Smoke check:</b> مگر با <code>--skip-check</code>، اسکریپت <code>scripts/infra/check_infra.sh</code> را صدا می‌زند.</li>
-      </ol>
-      <p align="justify"><b>نکته دربارهٔ network-analyzer:</b> این سرویس یک job دسته‌ای است (inbox را پردازش می‌کند)، نه daemon دائمی. در bring-up کامل یک‌بار با بقیه بالا می‌آید؛ اگر inbox خالی باشد معمولاً سریع خارج می‌شود.</p>
+      <p><b>۳. چیکارا می‌کند؟ (جریان مرحله‌ای)</b></p>
+      <p align="justify">در حالت کامل (بدون <code>--infra-only</code>) ترتیب ثابت است. سرویس‌های پروفایل <code>tools</code> و <code>test</code> در گام آخر با <code>up</code> عادی بالا نمی‌آیند.</p>
+
+      <table>
+        <thead><tr><th>مرحله</th><th>چه چیزی بالا می‌آید / اجرا می‌شود</th><th>منتظر چه چیزی می‌ماند</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>۰ — پیش‌نیاز و env</b></td>
+            <td><code>docker</code> / Compose روی PATH؛ ساخت <code>.env</code>های گم‌شده از <code>*.env.example</code>؛ پر کردن Postgres خالی و آینه به envهای host-side مربوط به <code>app_api</code> و <code>storage_consumer</code>.</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td><b>۱ — زیرساخت</b></td>
+            <td><code>postgres</code>، <code>zookeeper</code>، <code>kafka</code>، <code>kafka-init</code>، <code>kafka-ui</code>، <code>metabase</code></td>
+            <td>Postgres آماده؛ وجود/ساخت idempotent دیتابیس <code>metabase_app_db</code>؛ سلامت Metabase (با بودجهٔ retry بلند)؛ Kafka؛ اتمام موفق <code>kafka-init</code></td>
+          </tr>
+          <tr>
+            <td><b>۲ — فقط app-api</b></td>
+            <td><code>docker compose up -d app-api</code> (و در صورت نیاز <code>--build</code>)</td>
+            <td>healthcheck کانتینر <code>project_app_api</code> سبز شود</td>
+          </tr>
+          <tr>
+            <td><b>۳ — Seed اپ‌ها</b></td>
+            <td>اجرای <a href="script-seed-apps.html"><code>./scripts/seed_apps.sh</code></a> از روی host با <code>APP_API_PORT</code> خوانده‌شده از root <code>.env</code></td>
+            <td>اگر حداقل یک <code>[FAIL]</code> واقعی باشد، bring_up با exit غیرصفر قطع می‌شود (قبل از بالا آوردن crawler)</td>
+          </tr>
+          <tr>
+            <td><b>۴ — بقیهٔ استک پیش‌فرض</b></td>
+            <td><code>storage-consumer</code>، <code>crawler</code>؛ و در صورت <code>--with-cycle-reports</code> سرویس <code>cycle-reporter</code>. فهرست سرویس‌ها صریح است تا پروفایل‌های <code>tools</code> / <code>test</code> ناخواسته فعال نشوند.</td>
+            <td>سلامت <code>storage-consumer</code></td>
+          </tr>
+          <tr>
+            <td><b>۵ — Sentiment (اختیاری)</b></td>
+            <td>اگر image از قبل موجود <code>playpulse-sentiment:latest</code> باشد: <code>compose --profile tools up -d --no-build sentiment</code>؛ وگرنه skip بدون cold-build.</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td><b>۶ — Smoke</b></td>
+            <td><code>scripts/infra/check_infra.sh</code> (مگر <code>--skip-check</code>)</td>
+            <td>exit معنادار از smoke</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p align="justify"><b>چرا این ترتیب؟</b> Crawler در شروع چرخه لیست اپ‌های فعال را از App API می‌گیرد. اگر crawler همزمان با app-api (روی DB خالی) بالا بیاید، اولین چرخه با <code>total=0</code> تمام می‌شود. Seed بین «app-api سالم» و «شروع crawler» این شکاف را می‌بندد.</p>
+
+      <p><b>حالت <code>--infra-only</code>:</b> فقط مرحلهٔ ۰ و ۱؛ بدون app-api، seed، crawler، consumer و sentiment.</p>
+
+      <p><b>آنچه bring_up عمداً انجام نمی‌دهد:</b></p>
+      <ul>
+        <li>فعال کردن پروفایل <code>test</code> (سرویس‌های <code>*-tests</code>).</li>
+        <li>فعال کردن پروفایل <code>tools</code> برای <code>network-analyzer</code> — آن job دسته‌ای است و باید جداگانه با <code>docker compose --profile tools run --rm network-analyzer</code> صدا زده شود.</li>
+        <li>cold-build کردن image سنتیم‌نت؛ فقط در صورت وجود قبلی ممکن است کانتینر را با <code>--no-build</code> بسازد.</li>
+      </ul>
 
       <hr>
       <p><b>۴. تصمیمات معماری</b></p>
       <ul>
+        <li><b>Staged startup به‌جای یک up واحد:</b> تضمین ترتیب وابستگی داده (registry پر → crawler) فراتر از <code>depends_on</code> که فقط «کانتینر سالم» را تضمین می‌کند، نه «داده seed شده».</li>
         <li><b>جدا بودن از Ansible:</b> نصب OS/Docker کار provisioning است؛ این اسکریپت فقط bootstrap داخل مخزن کلون‌شده است تا مرز مسئولیت شفاف بماند.</li>
         <li><b>هرگز overwrite نکردن .env:</b> جلوگیری از از دست رفتن تنظیمات اپراتور روی سرور زنده.</li>
         <li><b>آینه‌کردن credentials:</b> یک منبع حقیقت برای Postgres در root <code>.env</code>، و همگام‌سازی envهای host تا تست/اجرای محلی گیر نکند.</li>
         <li><b>Metabase در INFRA نه APP:</b> مثل Kafka UI یک ابزار ops است، فقط به Postgres سالم نیاز دارد، و در حالت <code>--infra-only</code> هم مفید است.</li>
-        <li><b>network-analyzer پشت profile tools:</b> تا استک پیش‌فرض با jobهای دسته‌ای شلوغ نشود، ولی bring_up کامل عمداً آن پروفایل را فعال می‌کند.</li>
-        <li><b>Wait قبل از smoke:</b> «کانتینر بالا آمده» با «سرویس آماده است» یکی نیست؛ بدون wait، check_infra نویز کاذب می‌دهد.</li>
-        <li><b>Exit معنادار از check:</b> اگر smoke fail شود، اپراتور بلافاصله می‌فهمد استک «بالا آمده اما سالم نیست».</li>
+        <li><b>فهرست صریح سرویس‌ها در گام آخر:</b> تا <code>cycle-reporter</code> فقط با فلگ بیاید و پروفایل‌های tools/test دست‌نخورده بمانند.</li>
+        <li><b>Sentiment بدون cold-build:</b> همان قرارداد <code>run_tests_in_docker.sh</code>؛ build سنگین مدل فقط وقتی اپراتور عمداً <code>compose --profile tools build sentiment</code> زده باشد.</li>
+        <li><b>Wait قبل از smoke و قبل از seed:</b> «کانتینر بالا آمده» با «سرویس آماده است» یکی نیست.</li>
+        <li><b>شکست seed = توقف bring_up:</b> بهتر است crawler اصلاً بالا نیاید تا اینکه با registry ناقص شروع کند.</li>
       </ul>
 
       <hr>
       <p><b>۵. دستورات</b></p>
     </div>
 
-<pre class="sourceCode bash"><code class="sourceCode bash"># از ریشهٔ مخزن
+<pre class="sourceCode bash"><code class="sourceCode bash"># از ریشهٔ مخزن — استک کامل (infra → app-api → seed → consumer + crawler)
 ./scripts/bring_up.sh
 
 # فقط زیرساخت (Postgres / ZooKeeper / Kafka / UI / Metabase)
@@ -95,7 +139,7 @@
 # استک کامل + گزارش‌های چرخه (crawler pending + cycle-reporter)
 ./scripts/bring_up.sh --with-cycle-reports
 
-# رد کردن smoke check
+# رد کردن smoke check (مثلاً وقتی Ansible جداگانه check_infra را می‌زند)
 ./scripts/bring_up.sh --skip-check
 
 # استفاده از imageهای از قبل build‌شده
@@ -105,16 +149,26 @@
 </code></pre>
 
     <div dir="rtl">
-      <p><b>پیش‌نیاز:</b> Docker Engine + پلاگین Compose، اجرا از ریشهٔ کلون مخزن.</p>
-      <p><b>گام بعدی پیشنهادی پس از موفقیت:</b></p>
+      <p><b>پیش‌نیاز:</b> Docker Engine + پلاگین Compose، اجرا از ریشهٔ کلون مخزن؛ برای seed روی host به <code>curl</code> و <code>python3</code> نیاز است (همان پیش‌نیازهای <a href="script-seed-apps.html"><code>seed_apps.sh</code></a>).</p>
+      <p><b>بررسی سریع پس از موفقیت:</b></p>
     </div>
 
-<pre class="sourceCode bash"><code class="sourceCode bash">./scripts/verify/verify_storage_consumer.sh
+<pre class="sourceCode bash"><code class="sourceCode bash"># ترتیب زمانی شروع: app-api باید قبل از crawler باشد
+docker inspect -f '{{.Name}} started={{.State.StartedAt}}' project_app_api project_crawler
+
+# ۱۵ اپ seed‌شده
+curl -sS "http://localhost:${APP_API_PORT:-8000}/api/applications/" | python3 -m json.tool
+
+# اولین چرخه نباید total=0 باشد
+docker compose logs crawler | grep "Crawl cycle summary"
+
+# گام عملیاتی بعدی
+./scripts/verify/verify_storage_consumer.sh
 </code></pre>
 
     <div dir="rtl">
       <hr>
-      <p><a href="scripts.html">← بازگشت به فهرست اسکریپت‌ها</a> · <a href="script-check-infra.html">مستند check_infra.sh →</a></p>
+      <p><a href="scripts.html">← بازگشت به فهرست اسکریپت‌ها</a> · <a href="script-seed-apps.html">مستند seed_apps.sh →</a> · <a href="script-check-infra.html">مستند check_infra.sh →</a></p>
     </div>
   </article>
 </main>

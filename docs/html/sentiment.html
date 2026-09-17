@@ -275,7 +275,7 @@ docker compose run --rm sentiment run --batch-size 50 --dry-run
 docker compose run --rm sentiment -v run
   </div>
 
-  <div class="callout"><strong>نکته:</strong> <code>docker compose up</code> معمولی و حتی <code>bring_up.sh</code> این سرویس را به‌صورت daemon نگه نمی‌دارند. مثل <code>network-analyzer</code> باید صریحاً با <code>compose run</code> (و پروفایل <code>tools</code>) صدا زده شود. ENTRYPOINT برابر <code>python -m sentiment.main</code> است؛ آرگومان‌های بعد از نام سرویس مستقیماً به CLI می‌رسند.</div>
+  <div class="callout"><strong>نکته:</strong> <code>docker compose up</code> معمولی sentiment را بالا نمی‌آورد (پروفایل <code>tools</code>). <code>bring_up.sh</code> هم image سنتیم‌نت را cold-build نمی‌کند؛ فقط اگر <code>playpulse-sentiment:latest</code> از قبل موجود باشد ممکن است کانتینر را با <code>--no-build</code> بسازد — در غیر این صورت skip می‌کند. برای Job واقعی معمولاً باید صریحاً با <code>compose run</code> (و پروفایل <code>tools</code>) صدا زده شود. ENTRYPOINT برابر <code>python -m sentiment.main</code> است؛ آرگومان‌های بعد از نام سرویس مستقیماً به CLI می‌رسند.</div>
 </section>
 
 <section id="testing">

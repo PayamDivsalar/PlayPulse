@@ -19,8 +19,10 @@
       <a href="database-schema.html">Database Schema</a>
       <a href="infra-setup.html">Infrastructure</a>
       <a href="crawler.html">Crawler</a>
+      <a href="network-analyzer.html">Network Analyzer</a>
       <a href="storage-consumer.html">Storage Consumer</a>
       <a href="sentiment.html">Sentiment</a>
+      <a href="ansible.html">Ansible</a>
       <a class="active" href="scripts.html">Scripts</a>
     </nav>
   </div>
@@ -41,7 +43,7 @@
 
       <hr>
       <p><b>۱. کاراییش به زبان ساده</b></p>
-      <p align="justify">هر فایل capture داخل inbox را یکی‌یکی از طریق زیرسیستم Network Analyzer (<code>python -m network_analyzer.main</code>) رد می‌کند، سپس بر اساس کد خروج Analyzer فایل را جابه‌جا می‌کند: موفق → <code>processed/</code>؛ ورودی ردشده → <code>failed/</code> (+ فایل <code>.log</code>)؛ خطای قابل‌تلاش مجدد (مثل قطع بودن Kafka) → <b>همان‌جا در inbox می‌ماند</b> تا اجرای بعدی دوباره برداردش. همین مسیریابی، قلب ارزش اسکریپت است.</p>
+      <p align="justify">هر فایل capture داخل inbox را یکی‌یکی از طریق زیرسیستم <a href="network-analyzer.html">Network Analyzer</a> (<code>python -m network_analyzer.main</code>) رد می‌کند، سپس بر اساس کد خروج Analyzer فایل را جابه‌جا می‌کند: موفق → <code>processed/</code>؛ ورودی ردشده → <code>failed/</code> (+ فایل <code>.log</code>)؛ خطای قابل‌تلاش مجدد (مثل قطع بودن Kafka) → <b>همان‌جا در inbox می‌ماند</b> تا اجرای بعدی دوباره برداردش. همین مسیریابی، قلب ارزش اسکریپت است.</p>
 
       <hr>
       <p><b>۲. کجا در پروژه کلی استفاده می‌شود؟</b></p>

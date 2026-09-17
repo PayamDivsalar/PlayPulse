@@ -3,19 +3,50 @@
 # deploy role: hand off to the project's own scripts. No compose logic is
 # reimplemented here.
 #
-#   1. scripts/bring_up.sh --skip-check   -> prepare env, start the Compose
-#                                            stack, wait for services to be
-#                                            usable. --skip-check is passed so
-#                                            the smoke test runs as its own,
-#                                            clearly-reported step below.
-#   2. scripts/infra/check_infra.sh       -> confirm Postgres/Kafka/Metabase
-#                                            health; non-zero exit fails the play.
+# Order:
+#   0. (optional) scripts/run_tests_in_docker.sh
+#        Isolated playpulse_test suite. Off by default
+#        (run_tests_before_deploy). Runs BEFORE bring_up so a broken suite
+#        does not start the live stack under load. Soft on non-zero exit:
+#        live/oracle environmental SKIPs are handled inside the script;
+#        a real FAIL is reported as a warning so the operator decides.
+#   1. scripts/bring_up.sh --skip-check
+#        Prepare env, staged Compose up (infra → app-api → seed → rest).
+#        --skip-check so smoke runs once as the clear step below.
+#   2. scripts/infra/check_infra.sh
+#        Confirm Postgres/Kafka/Metabase health; non-zero exit fails the play.
 #
-# These run shell scripts, so Ansible always marks them "changed"; the
-# underlying `docker compose up -d` is itself idempotent. Idempotency of the
-# playbook as a whole is visible in the docker/project_setup roles reporting
-# no changes on a second run, and check_infra.sh passing every time.
+# These run shell scripts, so Ansible often marks them "changed"; the
+# underlying compose/bring_up paths are themselves idempotent.
 # =============================================================================
+
+- name: Run isolated docker test suite (optional, before bring-up)
+  ansible.builtin.command:
+    cmd: ./scripts/run_tests_in_docker.sh
+    chdir: "{{ project_dir }}"
+  register: docker_test_suite_result
+  when: run_tests_before_deploy | bool
+  failed_when: false
+  changed_when: false
+  tags: [deploy, tests]
+
+- name: Show docker test suite output
+  ansible.builtin.debug:
+    var: docker_test_suite_result.stdout_lines
+  when: run_tests_before_deploy | bool
+  tags: [deploy, tests]
+
+- name: Warn if docker test suite returned non-zero
+  ansible.builtin.debug:
+    msg: >-
+      Warning: run_tests_in_docker.sh exited with rc={{ docker_test_suite_result.rc }}.
+      Read the PASS/FAIL/SKIPPED summary above. SKIPPED for live/oracle
+      (no internet / no tshark) or a missing sentiment image is expected;
+      any other FAIL should be investigated before trusting this deploy.
+  when:
+    - run_tests_before_deploy | bool
+    - docker_test_suite_result.rc != 0
+  tags: [deploy, tests]
 
 - name: Bring up the stack (scripts/bring_up.sh)
   ansible.builtin.command:

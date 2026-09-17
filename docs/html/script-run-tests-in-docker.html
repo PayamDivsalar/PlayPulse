@@ -19,8 +19,10 @@
       <a href="database-schema.html">Database Schema</a>
       <a href="infra-setup.html">Infrastructure</a>
       <a href="crawler.html">Crawler</a>
+      <a href="network-analyzer.html">Network Analyzer</a>
       <a href="storage-consumer.html">Storage Consumer</a>
       <a href="sentiment.html">Sentiment</a>
+      <a href="ansible.html">Ansible</a>
       <a class="active" href="scripts.html">Scripts</a>
     </nav>
   </div>
@@ -50,7 +52,8 @@
         <li>راه استاندارد اجرای «همهٔ سوئیت‌های زیرسیستم» روی ماشین developer یا CI.</li>
         <li>متصل به سرویس‌های <code>*-tests</code> در <code>docker-compose.yml</code> (پروفایل <code>test</code>) به‌همراه override ایزوله‌سازی در <code>docker-compose.test.yml</code>.</li>
         <li>مکمل تست unit محلی؛ اینجا تمرکز روی شبکهٔ Compose و integration واقعی در محیط disposable است.</li>
-        <li><b>نه</b> برای healthcheck سرور production — آنجا <code>bring_up.sh</code> + <code>check_infra.sh</code> (و Ansible) کافی است.</li>
+        <li>اختیاری در Ansible: با <code>run_tests_before_deploy=true</code> <b>قبل از</b> <code>bring_up.sh</code> روی سرور (پیش‌فرض خاموش). جزئیات: <code>ansible/README.md</code>.</li>
+        <li><b>نه</b> جایگزین healthcheck استک live — آنجا <code>bring_up.sh</code> + <code>check_infra.sh</code> کافی است.</li>
       </ul>
 
       <hr>

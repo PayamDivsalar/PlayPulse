@@ -14,19 +14,20 @@
 #   2. Creates missing .env files from *.env.example (never overwrites)
 #   3. Fills blank Postgres credentials in the root .env if needed
 #   4. Mirrors those credentials into host-side app_api / storage_consumer envs
-#   5. Starts the Compose stack (infra + app-api + storage-consumer + crawler
-#      + network-analyzer via Compose profile ``tools``)
-#   6. Waits for Postgres / Kafka / app-api / storage-consumer and ensures
-#      metabase_app_db exists (idempotent; covers volumes created before
-#      postgres/init/ existed)
-#   7. Runs scripts/infra/check_infra.sh
+#   5. Staged Compose startup (full stack):
+#        a. Base infra (postgres, zookeeper, kafka, kafka-init, kafka-ui,
+#           metabase) + readiness / metabase_app_db
+#        b. app-api alone, wait until healthy
+#        c. scripts/seed_apps.sh (register initial applications)
+#        d. Remaining default services (storage-consumer, crawler, …)
+#           without Compose profiles ``tools`` or ``test``
+#   6. Runs scripts/infra/check_infra.sh
 #
 # What it does not do:
 #   - Install Docker/Compose on the OS (leave that to the operator or Ansible)
-#
-# Note: network-analyzer is a batch job (processes data/pcap/inbox), not a
-# long-running daemon. Bring-up starts it once with the rest of the stack; an
-# empty inbox usually means it exits quickly after start.
+#   - Start profile ``test`` (*-tests) services
+#   - Cold-build the sentiment image — if playpulse-sentiment:latest already
+#     exists, bring-up may start that container; otherwise sentiment is skipped
 #
 # Usage:
 #   ./scripts/bring_up.sh
@@ -62,15 +63,17 @@ WITH_CYCLE_REPORTS=false
 # healthy Postgres (compose enforces that via depends_on), and it is equally
 # useful in --infra-only host/venv development.
 INFRA_SERVICES=(postgres zookeeper kafka kafka-init kafka-ui metabase)
-# network-analyzer lives behind Compose profile ``tools``; bring_up enables
-# that profile when starting the full stack (see Compose up below).
-APP_SERVICES=(app-api storage-consumer crawler network-analyzer)
+# Started after app-api is healthy and seed_apps.sh has registered apps.
+# network-analyzer stays behind Compose profile ``tools`` (opt-in). Profile
+# ``test`` is never enabled here. Sentiment is handled separately: never
+# cold-built; started only when playpulse-sentiment:latest already exists.
+APP_SERVICES=(storage-consumer crawler)
+SENTIMENT_IMAGE="playpulse-sentiment:latest"
 
 POSTGRES_CONTAINER="project_postgres"
 KAFKA_CONTAINER="project_kafka"
 APP_API_CONTAINER="project_app_api"
 CONSUMER_CONTAINER="project_storage_consumer"
-ANALYZER_CONTAINER="project_network_analyzer"
 METABASE_CONTAINER="project_metabase"
 
 # --- Helpers -----------------------------------------------------------------
@@ -109,13 +112,13 @@ Options:
   -h, --help            Show this help and exit
 
 Examples:
-  # Full stack (infra + app-api + storage-consumer + crawler + network-analyzer)
+  # Full stack (infra → app-api → seed apps → storage-consumer + crawler)
   ./scripts/bring_up.sh
 
   # Same + cycle-reporter (runs scripts/reports/finalize_cycle_reports.py in a loop)
   ./scripts/bring_up.sh --with-cycle-reports
 
-  # Broker + database only (for host/venv App API + crawler development)
+  # Broker + database + Metabase/Kafka UI only (for host/venv development)
   ./scripts/bring_up.sh --infra-only
 EOF
 }
@@ -308,36 +311,57 @@ if [[ "$WITH_CYCLE_REPORTS" == true ]]; then
 fi
 
 # =============================================================================
-# 3. Compose up
+# 3. Staged Compose up
 # =============================================================================
-print_header "Docker Compose"
+# Full stack order (not a single `up` for everything):
+#   1) base infra → health / metabase_app_db
+#   2) app-api alone → wait healthy
+#   3) seed_apps.sh
+#   4) remaining default services (no tools/test profiles)
 
-SERVICES=("${INFRA_SERVICES[@]}")
-if [[ "$INFRA_ONLY" != true ]]; then
-    SERVICES+=("${APP_SERVICES[@]}")
-fi
-if [[ "$WITH_CYCLE_REPORTS" == true ]]; then
-    SERVICES+=(cycle-reporter)
-fi
+compose_up() {
+    local -a services=("$@")
+    local -a up_args=(up -d)
+    # Never cold-build sentiment via this helper (see maybe_start_sentiment).
+    local svc
+    for svc in "${services[@]}"; do
+        if [[ "$svc" == "sentiment" ]]; then
+            die "internal error: compose_up must not start sentiment (use maybe_start_sentiment)"
+        fi
+    done
+    if [[ "$NO_BUILD" != true ]]; then
+        up_args+=(--build)
+    fi
+    print_info "Starting: ${services[*]}"
+    "${COMPOSE[@]}" "${up_args[@]}" "${services[@]}"
+}
 
-# Profile ``tools`` is required for network-analyzer (see docker-compose.yml).
-UP_ARGS=()
-if [[ "$INFRA_ONLY" != true ]]; then
-    UP_ARGS+=(--profile tools)
-fi
-UP_ARGS+=(up -d)
-if [[ "$NO_BUILD" != true ]]; then
-    UP_ARGS+=(--build)
-fi
+sentiment_image_ready() {
+    docker image inspect "$SENTIMENT_IMAGE" >/dev/null 2>&1
+}
 
-print_info "Starting: ${SERVICES[*]}"
-"${COMPOSE[@]}" "${UP_ARGS[@]}" "${SERVICES[@]}"
-print_ok "Compose up completed."
+# Sentiment is profile ``tools`` and must never be cold-built by bring_up.
+# If the image already exists, start the container with --no-build; else skip.
+maybe_start_sentiment() {
+    print_header "Sentiment (optional)"
+    if sentiment_image_ready; then
+        print_info "Found ${SENTIMENT_IMAGE}; starting sentiment (--no-build)."
+        "${COMPOSE[@]}" --profile tools up -d --no-build sentiment
+        print_ok "sentiment container started (existing image, not rebuilt)."
+    else
+        print_info "Skipping sentiment — ${SENTIMENT_IMAGE} not present (will not cold-build)."
+    fi
+}
+
+print_header "Docker Compose — infrastructure"
+
+compose_up "${INFRA_SERVICES[@]}"
+print_ok "Infrastructure Compose up completed."
 
 # =============================================================================
-# 4. Wait until ready
+# 4. Wait until infra is ready (+ metabase_app_db)
 # =============================================================================
-print_header "Readiness"
+print_header "Readiness (infrastructure)"
 
 wait_postgres() {
     local retries=30
@@ -456,25 +480,54 @@ else
 fi
 
 if [[ "$INFRA_ONLY" != true ]]; then
+    # -------------------------------------------------------------------------
+    # 4b. app-api alone (before crawler / storage-consumer)
+    # -------------------------------------------------------------------------
+    print_header "Docker Compose — app-api"
+    compose_up app-api
+    print_ok "app-api Compose up completed."
+
     if wait_app_api; then
         print_ok "app-api is healthy."
     else
         die "app-api did not become healthy. Check: docker compose logs app-api"
     fi
 
+    # -------------------------------------------------------------------------
+    # 4c. Seed initial applications (host → localhost:APP_API_PORT)
+    # -------------------------------------------------------------------------
+    print_header "Seed applications"
+    APP_API_PORT="$(env_get "$ROOT_ENV" APP_API_PORT)"
+    APP_API_PORT="${APP_API_PORT:-8000}"
+    export APP_API_PORT
+    SEED_APPS="$SCRIPT_DIR/seed_apps.sh"
+    if [[ -x "$SEED_APPS" ]]; then
+        "$SEED_APPS"
+    else
+        bash "$SEED_APPS"
+    fi
+
+    # -------------------------------------------------------------------------
+    # 4d. Remaining default stack (no tools / test profiles)
+    # -------------------------------------------------------------------------
+    print_header "Docker Compose — remaining services"
+    REMAINING_SERVICES=("${APP_SERVICES[@]}")
+    if [[ "$WITH_CYCLE_REPORTS" == true ]]; then
+        REMAINING_SERVICES+=(cycle-reporter)
+    fi
+    # Explicit service list (not bare `up -d`) so we never pull in profile
+    # ``tools`` / ``test``, and cycle-reporter stays opt-in via the flag.
+    # Sentiment is never in this list (never --build'd here).
+    compose_up "${REMAINING_SERVICES[@]}"
+    print_ok "Remaining services Compose up completed."
+
+    maybe_start_sentiment
+
+    print_header "Readiness (application services)"
     if wait_storage_consumer; then
         print_ok "storage-consumer is healthy."
     else
         die "storage-consumer did not become healthy. Check: docker compose logs storage-consumer"
-    fi
-
-    # Batch job: "started" means the container was created and has either
-    # finished the inbox pass or is still running. Do not require healthy.
-    analyzer_status="$(docker inspect -f '{{.State.Status}}' "$ANALYZER_CONTAINER" 2>/dev/null || echo missing)"
-    if [[ "$analyzer_status" == "running" || "$analyzer_status" == "exited" ]]; then
-        print_ok "network-analyzer was started (status=$analyzer_status; batch over data/pcap/inbox)."
-    else
-        print_info "network-analyzer status=$analyzer_status — check: docker compose --profile tools logs network-analyzer"
     fi
 fi
 
@@ -498,11 +551,7 @@ fi
 # =============================================================================
 print_header "Status"
 
-if [[ "$INFRA_ONLY" != true ]]; then
-    "${COMPOSE[@]}" --profile tools ps -a
-else
-    "${COMPOSE[@]}" ps
-fi
+"${COMPOSE[@]}" ps -a
 
 KAFKA_UI_PORT="$(env_get "$ROOT_ENV" KAFKA_UI_PORT)"
 KAFKA_UI_PORT="${KAFKA_UI_PORT:-8080}"
@@ -515,10 +564,13 @@ echo ""
 echo "Useful URLs / commands:"
 echo "  App API:    http://localhost:${APP_API_PORT}/swagger/"
 echo "  Kafka UI:   http://localhost:${KAFKA_UI_PORT}"
-echo "  Compose:    docker compose --profile tools ps -a"
+echo "  Compose:    docker compose ps -a"
 echo "  Consumer:   ./scripts/verify/verify_storage_consumer.sh"
-echo "  Analyzer:   docker compose --profile tools logs network-analyzer"
+echo "  Analyzer:   docker compose --profile tools run --rm network-analyzer"
 echo "              (drop pcaps in data/pcap/inbox, then re-run the service)"
+echo "  Sentiment:  docker compose --profile tools build sentiment   # once;"
+echo "              then re-run bring_up (or: compose --profile tools up -d --no-build sentiment)"
+echo "  Seed apps:  ./scripts/seed_apps.sh"
 if [[ "$WITH_CYCLE_REPORTS" == true ]] || [[ "$(env_get "$ROOT_ENV" CRAWLER_CYCLE_REPORTS_ENABLED)" == "true" ]]; then
     echo "  Reports:    docker compose logs -f cycle-reporter"
     echo "              tail -n 20 data/reports/cycles.jsonl"

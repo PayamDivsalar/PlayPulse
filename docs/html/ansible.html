@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ansible — استقرار Production | مستندات پروژه</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">مستندات فنی پروژه</a>
+    <nav>
+      <a href="index.html">خانه</a>
+      <a href="application-registry.html">Application Registry</a>
+      <a href="database-schema.html">Database Schema</a>
+      <a href="infra-setup.html">Infrastructure</a>
+      <a href="crawler.html">Crawler</a>
+      <a href="network-analyzer.html">Network Analyzer</a>
+      <a href="storage-consumer.html">Storage Consumer</a>
+      <a href="sentiment.html">Sentiment</a>
+      <a class="active" href="ansible.html">Ansible</a>
+      <a href="scripts.html">Scripts</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">
+    <span class="eyebrow">OPS · PRODUCTION DEPLOYMENT</span>
+    <h1>Ansible — استقرار خودکار PlayPulse روی سرور Ubuntu</h1>
+  </div>
+
+  <article class="doc-content">
+    <div dir="rtl">
+      <p><a href="index.html">← بازگشت به خانه</a> · راهنمای انگلیسی کوتاه: <code>ansible/README.md</code></p>
+      <hr>
+
+      <p align="justify">این صفحه مرجع کامل استقرار production با Ansible است: فلسفهٔ طراحی، ساختار پوشه، نقش هر فایل، جریان اجرای playbook، تضمین idempotency، راهنمای گام‌به‌گام برای سرور واقعی، و تمام دستورها و سوئیچ‌های موردنیاز این پروژه. پس از خواندن باید بتوانید بدون حدس زدن، از صفر تا استقرار کامل و به‌روزرسانی‌های بعدی را اجرا کنید.</p>
+
+      <p><b>فهرست:</b></p>
+      <ol>
+        <li><a href="#philosophy">فلسفه و جایگاه Ansible در پروژه</a></li>
+        <li><a href="#structure">ساختار پوشهٔ <code>ansible/</code></a></li>
+        <li><a href="#roles">نقش‌ها (Roles) و کار هر کدام</a></li>
+        <li><a href="#flow">جریان کامل یک Deploy</a></li>
+        <li><a href="#idempotency">Idempotency — چرا اجرای دوباره امن است</a></li>
+        <li><a href="#vars">متغیرها، Vault و قالب <code>.env</code></a></li>
+        <li><a href="#guide">راهنمای گام‌به‌گام Production</a></li>
+        <li><a href="#commands">مرجع دستورها، تگ‌ها و سوئیچ‌ها</a></li>
+        <li><a href="#scripts">پیوند با اسکریپت‌های پروژه</a></li>
+        <li><a href="#checklist">چک‌لیست و نکات عملیاتی</a></li>
+      </ol>
+
+      <hr>
+      <h2 id="philosophy">۱. فلسفه و جایگاه Ansible در پروژه</h2>
+      <p align="justify">Ansible اینجا یک <b>لایهٔ نازک روی ابزار خود پروژه</b> است، نه جایگزین Compose یا منطق راه‌اندازی. منطق واقعی «بالا آوردن استک» داخل اسکریپت‌های مخزن است:</p>
+      <ul>
+        <li><a href="script-bring-up.html"><code>scripts/bring_up.sh</code></a> — آماده‌سازی env، راه‌اندازی مرحله‌ای Compose، seed اپ‌ها</li>
+        <li><a href="script-check-infra.html"><code>scripts/infra/check_infra.sh</code></a> — Smoke Test زیرساخت</li>
+        <li><a href="script-run-tests-in-docker.html"><code>scripts/run_tests_in_docker.sh</code></a> — تست ایزوله (اختیاری، قبل از bring_up)</li>
+      </ul>
+      <p align="justify">کار Ansible این است که روی سرور Ubuntu خام: Docker را نصب کند، مخزن را clone/pull کند، فایل <code>.env</code> را از قالب و Vault بسازد، سپس همان اسکریپت‌ها را صدا بزند. اگر فردا منطق bring_up عوض شود، playbook عمداً آن را کپی نمی‌کند — فقط همان اسکریپت را اجرا می‌کند.</p>
+      <p><b>مرز مسئولیت:</b></p>
+      <table>
+        <thead><tr><th>لایه</th><th>مسئولیت</th><th>چه چیزی نیست</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Ansible</td>
+            <td>Provisioning سرور + تحویل کد + رندر <code>.env</code> + فراخوانی اسکریپت‌ها</td>
+            <td>بازنویسی <code>docker compose</code> یا منطق seed/crawl</td>
+          </tr>
+          <tr>
+            <td>اسکریپت‌های <code>scripts/</code></td>
+            <td>راه‌اندازی استک، seed، smoke، تست ایزوله</td>
+            <td>نصب Docker روی OS یا مدیریت SSH</td>
+          </tr>
+          <tr>
+            <td>Compose / سرویس‌ها</td>
+            <td>تعریف کانتینرها، healthcheck، پروفایل‌ها</td>
+            <td>دانستن اینکه اپراتور کی deploy می‌زند</td>
+          </tr>
+        </tbody>
+      </table>
+      <p align="justify"><b>هدف سرور:</b> production Ubuntu با SSH و کاربر sudo. Control node (لپ‌تاپ یا CI) فقط Ansible را دارد؛ روی خود سرور لازم نیست Ansible نصب باشد.</p>
+
+      <hr>
+      <h2 id="structure">۲. ساختار پوشهٔ <code>ansible/</code></h2>
+    </div>
+
+<pre class="sourceCode"><code>ansible/
+  ansible.cfg                 # تنظیمات پیش‌فرض (inventory، roles_path، become، diff)
+  inventory.ini.example       # نمونهٔ inventory — کپی به inventory.ini
+  playbook.yml                # play اصلی: docker → project_setup → deploy
+  group_vars/
+    all.yml                   # متغیرهای غیرحساس (قابل commit)
+    vault.yml.example         # قالب رمزها — فایل واقعی vault.yml رمزنگاری‌شده و gitignore
+  roles/
+    docker/tasks/main.yml
+    project_setup/tasks/main.yml
+    deploy/tasks/main.yml
+  templates/
+    env.j2                    # Jinja2 برای .env سرور (آینهٔ .env.example ریشه)
+  README.md                   # خلاصهٔ انگلیسی
+</code></pre>
+
+    <div dir="rtl">
+      <table>
+        <thead><tr><th>مسیر</th><th>نقش</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>ansible.cfg</code></td>
+            <td>inventory پیش‌فرض <code>inventory.ini</code>، مسیر roles، <code>host_key_checking=False</code> برای اولین اتصال، همیشه نمایش diff برای قالب‌ها، و <code>become=True</code> (sudo به root).</td>
+          </tr>
+          <tr>
+            <td><code>inventory.ini.example</code></td>
+            <td>گروه <code>[production]</code> با placeholder IP. فایل واقعی <code>inventory.ini</code> <b>gitignore</b> است و نباید commit شود.</td>
+          </tr>
+          <tr>
+            <td><code>playbook.yml</code></td>
+            <td>تعریف play روی hosts گروه <code>production</code>؛ بارگذاری Vault؛ ترتیب سه role.</td>
+          </tr>
+          <tr>
+            <td><code>group_vars/all.yml</code></td>
+            <td>URL مخزن، مسیر نصب روی سرور، پورت‌ها، فلگ گزارش چرخه، <code>run_tests_before_deploy</code>.</td>
+          </tr>
+          <tr>
+            <td><code>group_vars/vault.yml</code></td>
+            <td>رمز Postgres (db/user/password). فقط با <code>ansible-vault</code> ساخته می‌شود؛ در git نیست.</td>
+          </tr>
+          <tr>
+            <td><code>templates/env.j2</code></td>
+            <td>خروجی: <code>{{ project_dir }}/.env</code> با mode <code>0600</code> و backup زمان‌دار هنگام تغییر.</td>
+          </tr>
+          <tr>
+            <td><code>roles/*</code></td>
+            <td>هر role یک مسئولیت شفاف؛ تگ‌گذاری برای اجرای جزئی.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <hr>
+      <h2 id="roles">۳. نقش‌ها (Roles) و کار هر کدام</h2>
+
+      <h3>۳.۱ نقش <code>docker</code> — تگ <code>docker</code></h3>
+      <p align="justify">نصب idempotent موتور Docker و پلاگین Compose از مخزن رسمی APT داکر:</p>
+      <ol>
+        <li>پیش‌نیازهای apt (<code>ca-certificates</code>, <code>curl</code>, <code>gnupg</code>)</li>
+        <li>کلید GPG و ریپازیتوری Docker برای Ubuntu هدف</li>
+        <li>نصب <code>docker-ce</code>، CLI، containerd، buildx، <code>docker-compose-plugin</code></li>
+        <li>سرویس docker: <code>started</code> + <code>enabled</code></li>
+        <li>افزودن کاربر SSH (<code>ansible_user</code>) به گروه <code>docker</code> تا بعداً بدون sudo بتواند docker بزند</li>
+      </ol>
+      <p>اجرای دوم معمولاً فقط <code>ok</code> می‌دهد و چیزی نصب دوباره نمی‌کند.</p>
+
+      <h3>۳.۲ نقش <code>project_setup</code> — تگ‌های <code>project_setup</code> و بخشی <code>deploy</code></h3>
+      <ol>
+        <li>اطمینان از نصب <code>git</code></li>
+        <li>ساخت دایرکتوری <code>project_dir</code> (پیش‌فرض <code>/opt/playpulse</code>)</li>
+        <li><code>git clone</code> یا <code>pull</code> روی <code>project_version</code> (پیش‌فرض <code>main</code>) — با <code>force: false</code> تا تغییرات محلی ناخواسته پاک نشوند</li>
+        <li>رندر <code>templates/env.j2</code> → <code>{{ project_dir }}/.env</code></li>
+      </ol>
+      <p align="justify">تسک‌های clone و template علاوه بر <code>project_setup</code> تگ <code>deploy</code> هم دارند؛ بنابراین <code>--tags deploy</code> کد و <code>.env</code> را به‌روز می‌کند بدون دست زدن به نصب Docker.</p>
+
+      <h3>۳.۳ نقش <code>deploy</code> — تگ‌های <code>deploy</code> و <code>tests</code></h3>
+      <p>ترتیب ثابت داخل این role:</p>
+      <table>
+        <thead><tr><th>گام</th><th>دستور</th><th>رفتار شکست</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>۰ (اختیاری)</td>
+            <td><code>./scripts/run_tests_in_docker.sh</code></td>
+            <td>فقط وقتی <code>run_tests_before_deploy=true</code>. با <code>failed_when: false</code> کل playbook را نمی‌شکند؛ خروجی و در صورت rc≠۰ یک Warning چاپ می‌شود.</td>
+          </tr>
+          <tr>
+            <td>۱</td>
+            <td><code>./scripts/bring_up.sh --skip-check</code></td>
+            <td>شکست اسکریپت → شکست play. <code>--skip-check</code> تا smoke جدا و شفاف در گام بعد باشد.</td>
+          </tr>
+          <tr>
+            <td>۲</td>
+            <td><code>./scripts/infra/check_infra.sh</code></td>
+            <td>rc≠۰ → شکست play (استک «بالا آمده اما سالم نیست» پذیرفته نمی‌شود).</td>
+          </tr>
+        </tbody>
+      </table>
+      <p align="justify">خروجی هر اسکریپت با تسک <code>debug</code> در لاگ Ansible دیده می‌شود تا در CI یا ترمینال، لاگ bring_up / تست / smoke کامل باشد.</p>
+
+      <hr>
+      <h2 id="flow">۴. جریان کامل یک Deploy</h2>
+      <p><b>اجرای کامل پیش‌فرض</b> (<code>run_tests_before_deploy=false</code>):</p>
+    </div>
+
+<pre class="sourceCode"><code>Control node                     Target Ubuntu server
+─────────────                    ────────────────────
+ansible-playbook ...
+        │
+        ├─ role: docker ────────► نصب/تأیید Docker + Compose + گروه docker
+        │
+        ├─ role: project_setup ► git clone/pull در /opt/playpulse
+        │                        رندر .env از Vault + all.yml
+        │
+        └─ role: deploy
+             ├─ (tests skipped)
+             ├─ bring_up.sh --skip-check
+             │     infra → app-api healthy → seed_apps.sh → crawler/consumer …
+             └─ check_infra.sh  (Postgres / Kafka / Metabase)
+</code></pre>
+
+    <div dir="rtl">
+      <p><b>با تست ایزوله قبل از bring_up</b> (<code>-e run_tests_before_deploy=true</code>):</p>
+      <ol>
+        <li>همان docker + project_setup</li>
+        <li>سپس روی سرور: استک جدا <code>playpulse_test</code> + <code>.env.test</code> (دست به root <code>.env</code> و استک live نمی‌زند)</li>
+        <li>خلاصهٔ PASS/FAIL/SKIPPED چاپ می‌شود</li>
+        <li>بعد bring_up و check_infra — حتی اگر تست soft-fail شده باشد (تصمیم نهایی با اپراتور)</li>
+      </ol>
+      <p align="justify"><b>چرا تست قبل از bring_up؟</b> سوئیت ایزوله استک live را verify نمی‌کند؛ health واقعی بعد از bring_up با <code>check_infra</code> است. اجرای تست قبل از بالا آوردن سرویس‌های production از رقابت منابع با crawler/Metabase جلوگیری می‌کند و مشکل واضح کد/ماشین را زودتر نشان می‌دهد.</p>
+
+      <p><b>داخل <code>bring_up.sh</code> (خلاصه — جزئیات در <a href="script-bring-up.html">مستند bring_up</a>):</b></p>
+      <ol>
+        <li>زیرساخت: postgres، zookeeper، kafka، kafka-init، kafka-ui، metabase</li>
+        <li>فقط <code>app-api</code> تا healthy</li>
+        <li><a href="script-seed-apps.html"><code>seed_apps.sh</code></a> — ثبت ۱۵ اپ اولیه</li>
+        <li>بقیه: storage-consumer، crawler (+ اختیاری cycle-reporter)</li>
+        <li>sentiment فقط اگر image از قبل باشد؛ بدون cold-build</li>
+      </ol>
+
+      <hr>
+      <h2 id="idempotency">۵. Idempotency — چرا اجرای دوباره امن است</h2>
+      <p align="justify">Idempotent یعنی بار دوم و سوم همان playbook نباید سیستم را خراب کند یا state متناقض بسازد. در این پروژه لایه‌لایه تضمین شده:</p>
+      <table>
+        <thead><tr><th>جزء</th><th>چگونه idempotent است</th><th>علامت در Ansible</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>نصب Docker (apt / key / repo / service)</td>
+            <td>ماژول‌های رسمی؛ اگر بسته نصب باشد دوباره نصب سنگین نمی‌شود</td>
+            <td>اجرای دوم: بیشتر <code>ok</code>، نه <code>changed</code></td>
+          </tr>
+          <tr>
+            <td><code>git</code> module</td>
+            <td>اگر dest موجود باشد update می‌کند؛ <code>force: false</code></td>
+            <td><code>changed</code> فقط وقتی ref عوض شود</td>
+          </tr>
+          <tr>
+            <td>قالب <code>.env</code></td>
+            <td>فقط وقتی محتوای رندرشده فرق کند می‌نویسد؛ backup زمان‌دار</td>
+            <td><code>changed</code> + diff در خروجی</td>
+          </tr>
+          <tr>
+            <td><code>bring_up.sh</code> / Compose</td>
+            <td><code>docker compose up -d</code> و seed با HTTP 409 برای duplicate</td>
+            <td>Ansible تسک command را معمولاً <code>changed</code> می‌زند (چون shell است)، ولی اثر جانبی روی سرور idempotent است</td>
+          </tr>
+          <tr>
+            <td><code>check_infra.sh</code></td>
+            <td>فقط read/write تستی موقت و پاکسازی</td>
+            <td><code>changed_when: false</code></td>
+          </tr>
+          <tr>
+            <td>تست ایزوله Docker</td>
+            <td>پروژهٔ جدا + teardown volume در پایان</td>
+            <td><code>changed_when: false</code>؛ استک live دست‌نخورده</td>
+          </tr>
+        </tbody>
+      </table>
+      <p align="justify"><b>نکتهٔ ذهنی مهم:</b> «Ansible گفت changed» برای تسک‌های <code>command</code> مربوط به bring_up به‌معنی «سرور خراب شد» نیست؛ یعنی «اسکریپت دوباره اجرا شد». سلامت واقعی را از خروجی اسکریپت و موفقیت <code>check_infra</code> بخوانید.</p>
+
+      <hr>
+      <h2 id="vars">۶. متغیرها، Vault و قالب <code>.env</code></h2>
+
+      <h3>۶.۱ <code>group_vars/all.yml</code> (غیرحساس — commit می‌شود)</h3>
+      <table>
+        <thead><tr><th>متغیر</th><th>پیش‌فرض مفهومی</th><th>کاربرد</th></tr></thead>
+        <tbody>
+          <tr><td><code>project_repo_url</code></td><td>URL گیت‌هاب PlayPulse</td><td>منبع clone/pull</td></tr>
+          <tr><td><code>project_version</code></td><td><code>main</code></td><td>branch / tag / commit</td></tr>
+          <tr><td><code>project_dir</code></td><td><code>/opt/playpulse</code></td><td>مسیر کار روی سرور</td></tr>
+          <tr><td><code>postgres_port</code> / <code>app_api_port</code> / …</td><td>مطابق <code>.env.example</code></td><td>پورت‌های publish در <code>.env</code></td></tr>
+          <tr><td><code>crawler_cycle_reports_enabled</code></td><td><code>false</code></td><td>گزارش چرخه crawl+persist</td></tr>
+          <tr><td><code>run_tests_before_deploy</code></td><td><code>false</code></td><td>اجرای اختیاری تست ایزوله قبل از bring_up</td></tr>
+        </tbody>
+      </table>
+
+      <h3>۶.۲ Vault (حساس — commit نمی‌شود)</h3>
+      <p>کلیدهای لازم در <code>vault.yml</code>:</p>
+      <ul>
+        <li><code>vault_postgres_db</code></li>
+        <li><code>vault_postgres_user</code></li>
+        <li><code>vault_postgres_password</code></li>
+      </ul>
+      <p>این‌ها داخل <code>env.j2</code> به <code>POSTGRES_*</code> تبدیل می‌شوند. playbook فایل Vault را با <code>vars_files</code> صریح لود می‌کند؛ برای decrypt هنگام اجرا معمولاً <code>--ask-vault-pass</code> لازم است.</p>
+
+      <h3>۶.۳ خروجی <code>.env</code> روی سرور</h3>
+      <p align="justify">فقط برای substitution در <code>docker-compose.yml</code> است (اعتبارنامه و پورت‌ها). فایل با mode <code>0600</code> نوشته می‌شود. ویرایش دستی روی سرور در deploy بعدی با رندر قالب ممکن است overwrite شود — منبع حقیقت Vault + <code>all.yml</code> است.</p>
+
+      <hr>
+      <h2 id="guide">۷. راهنمای گام‌به‌گام Production</h2>
+
+      <h3>گام ۰ — پیش‌نیازها</h3>
+      <ul>
+        <li>یک سرور Ubuntu با IP عمومی/خصوصی قابل SSH</li>
+        <li>کاربر با sudo (مثلاً <code>ubuntu</code>)</li>
+        <li>روی لپ‌تاپ/CI: Ansible نصب باشد (<code>ansible --version</code>)</li>
+        <li>مخزن PlayPulse روی control node کلون شده باشد تا پوشهٔ <code>ansible/</code> در دسترس باشد</li>
+      </ul>
+
+      <h3>گام ۱ — نصب Ansible روی control node</h3>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash"># Ubuntu/Debian
+sudo apt update &amp;&amp; sudo apt install -y ansible
+
+# یا با pipx
+pipx install --include-deps ansible
+
+ansible --version
+</code></pre>
+
+    <div dir="rtl">
+      <h3>گام ۲ — Inventory واقعی</h3>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash">cd ansible
+cp inventory.ini.example inventory.ini
+# ویرایش: ansible_host = IP واقعی سرور، ansible_user = کاربر SSH
+</code></pre>
+
+    <div dir="rtl">
+      <p>نمونهٔ مفهومی:</p>
+    </div>
+
+<pre class="sourceCode ini"><code class="sourceCode ini">[production]
+prod-server ansible_host=203.0.113.10
+
+[production:vars]
+ansible_user=ubuntu
+# ansible_ssh_private_key_file=~/.ssh/id_ed25519
+ansible_python_interpreter=/usr/bin/python3
+</code></pre>
+
+    <div dir="rtl">
+      <p>تست اتصال:</p>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash">ansible -i inventory.ini production -m ping
+</code></pre>
+
+    <div dir="rtl">
+      <h3>گام ۳ — ساخت Vault رمزنگاری‌شده</h3>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash">cd ansible
+ansible-vault create group_vars/vault.yml
+# پسورد Vault را تنظیم کنید و این کلیدها را با مقادیر واقعی production بگذارید:
+#
+# vault_postgres_db: "playpulse_prod"
+# vault_postgres_user: "playpulse"
+# vault_postgres_password: "a-long-random-secret"
+</code></pre>
+
+    <div dir="rtl">
+      <p>بعداً:</p>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash">ansible-vault edit group_vars/vault.yml
+ansible-vault view group_vars/vault.yml
+</code></pre>
+
+    <div dir="rtl">
+      <h3>گام ۴ — تنظیمات غیرحساس (در صورت نیاز)</h3>
+      <p>در <code>group_vars/all.yml</code> مثلاً <code>project_version</code> را روی tag انتشار بگذارید، یا پورت‌ها را با سیاست فایروال هم‌تراز کنید. برای deploy عادی <code>run_tests_before_deploy</code> را <code>false</code> بگذارید.</p>
+
+      <h3>گام ۵ — اولین استقرار کامل</h3>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash">cd ansible
+ansible-playbook -i inventory.ini playbook.yml --ask-vault-pass
+# اگر sudo روی سرور پسورد می‌خواهد:
+ansible-playbook -i inventory.ini playbook.yml --ask-vault-pass -K
+</code></pre>
+
+    <div dir="rtl">
+      <p align="justify">انتظار: نصب Docker (اولین بار طولانی‌تر)، clone، نوشتن <code>.env</code>، bring_up مرحله‌ای، seed اپ‌ها، سپس check_infra سبز. URLهای مفید روی سرور: App API روی <code>APP_API_PORT</code>، Kafka UI، Metabase.</p>
+
+      <h3>گام ۶ — به‌روزرسانی بعدی کد (بدون نصب دوباره Docker)</h3>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash">ansible-playbook -i inventory.ini playbook.yml --tags deploy --ask-vault-pass
+</code></pre>
+
+    <div dir="rtl">
+      <p>این مسیر: pull + رندر <code>.env</code> + (اختیاری تست) + bring_up + check_infra.</p>
+
+      <h3>گام ۷ — Deploy با تست ایزوله قبل از bring_up</h3>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash">ansible-playbook -i inventory.ini playbook.yml --ask-vault-pass \
+  -e "run_tests_before_deploy=true"
+</code></pre>
+
+    <div dir="rtl">
+      <p align="justify">خلاصهٔ PASS/FAIL/SKIPPED را در خروجی debug بخوانید. SKIPPED برای sentiment بدون image یا محدودیت محیطی live/oracle طبیعی است؛ هر FAIL واقعی را قبل از اعتماد به سرور بررسی کنید. این گام playbook را به‌خاطر soft-fail متوقف نمی‌کند.</p>
+
+      <hr>
+      <h2 id="commands">۸. مرجع دستورها، تگ‌ها و سوئیچ‌ها</h2>
+
+      <h3>۸.۱ تگ‌های playbook این پروژه</h3>
+      <table>
+        <thead><tr><th>تگ</th><th>چه چیزی اجرا می‌شود</th></tr></thead>
+        <tbody>
+          <tr><td><code>docker</code></td><td>فقط نقش نصب Docker/Compose</td></tr>
+          <tr><td><code>project_setup</code></td><td>git + ساخت مسیر + (با تگ کامل‌تر) رندر env — مطابق تگ‌های تسک‌ها</td></tr>
+          <tr><td><code>deploy</code></td><td>به‌روزرسانی کد + <code>.env</code> + مسیر deploy (تست اختیاری + bring_up + check_infra)</td></tr>
+          <tr><td><code>tests</code></td><td>فقط بلوک تست ایزوله؛ همچنان نیاز به <code>-e run_tests_before_deploy=true</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3>۸.۲ دستورهای رایج</h3>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash">cd ansible
+
+# استقرار کامل
+ansible-playbook -i inventory.ini playbook.yml --ask-vault-pass
+
+# استقرار کامل + sudo password
+ansible-playbook -i inventory.ini playbook.yml --ask-vault-pass -K
+
+# فقط redeploy (بدون نقش docker)
+ansible-playbook -i inventory.ini playbook.yml --tags deploy --ask-vault-pass
+
+# فقط Docker
+ansible-playbook -i inventory.ini playbook.yml --tags docker --ask-vault-pass
+
+# فقط تست ایزوله (روی سرور، قبل از/بدون bring_up در همین تگ)
+ansible-playbook -i inventory.ini playbook.yml --tags tests --ask-vault-pass \
+  -e "run_tests_before_deploy=true"
+
+# فعال‌سازی گزارش چرخه از طریق متغیر (در all.yml یا -e)
+ansible-playbook -i inventory.ini playbook.yml --ask-vault-pass \
+  -e "crawler_cycle_reports_enabled=true"
+
+# شاخه/تگ مشخص برای deploy
+ansible-playbook -i inventory.ini playbook.yml --tags deploy --ask-vault-pass \
+  -e "project_version=v1.2.3"
+
+# اعتبارسنجی بدون تغییر
+ansible-playbook -i inventory.ini playbook.yml --syntax-check
+ansible-playbook -i inventory.ini playbook.yml --check --diff --ask-vault-pass
+
+# لیست تسک‌ها قبل از اجرا
+ansible-playbook -i inventory.ini playbook.yml --list-tasks
+ansible-playbook -i inventory.ini playbook.yml --list-tags
+</code></pre>
+
+    <div dir="rtl">
+      <h3>۸.۳ سوئیچ‌های Ansible که در این پروژه زیاد به کار می‌آیند</h3>
+      <table>
+        <thead><tr><th>سوئیچ</th><th>معنا برای این پروژه</th></tr></thead>
+        <tbody>
+          <tr><td><code>-i inventory.ini</code></td><td>فایل hosts؛ اگر از داخل <code>ansible/</code> اجرا کنید معمولاً از cfg هم خوانده می‌شود</td></tr>
+          <tr><td><code>--ask-vault-pass</code> / <code>-J</code></td><td>رمزگشایی <code>group_vars/vault.yml</code></td></tr>
+          <tr><td><code>-K</code> / <code>--ask-become-pass</code></td><td>پسورد sudo روی سرور</td></tr>
+          <tr><td><code>--tags</code> / <code>--skip-tags</code></td><td>اجرای جزئی نقش‌ها</td></tr>
+          <tr><td><code>-e KEY=VAL</code></td><td>override متغیر (مثل تست یا version)</td></tr>
+          <tr><td><code>--check</code></td><td>dry-run؛ بعضی تسک‌های command ممکن است کامل شبیه‌سازی نشوند</td></tr>
+          <tr><td><code>--diff</code></td><td>نمایش diff قالب‌ها؛ در cfg این پروژه diff همیشه روشن است</td></tr>
+          <tr><td><code>--limit hostname</code></td><td>اگر چند host در inventory دارید، محدود کردن هدف</td></tr>
+          <tr><td><code>-v</code> / <code>-vv</code></td><td>جزئیات بیشتر برای دیباگ</td></tr>
+        </tbody>
+      </table>
+
+      <h3>۸.۴ دستورهای کمکی روی خود سرور (بعد از deploy)</h3>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash">cd /opt/playpulse   # یا project_dir شما
+
+docker compose ps -a
+./scripts/infra/check_infra.sh
+./scripts/seed_apps.sh          # معمولاً لازم نیست؛ bring_up زده
+curl -sS "http://localhost:${APP_API_PORT:-8000}/api/applications/" | python3 -m json.tool
+docker compose logs crawler | grep "Crawl cycle summary"
+</code></pre>
+
+    <div dir="rtl">
+      <hr>
+      <h2 id="scripts">۹. پیوند با اسکریپت‌های پروژه</h2>
+      <table>
+        <thead><tr><th>اسکریپت</th><th>مستند</th><th>نقش در Ansible</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>bring_up.sh</code></td>
+            <td><a href="script-bring-up.html">مستند</a></td>
+            <td>هستهٔ بالا آوردن استک live؛ با <code>--skip-check</code></td>
+          </tr>
+          <tr>
+            <td><code>seed_apps.sh</code></td>
+            <td><a href="script-seed-apps.html">مستند</a></td>
+            <td>غیرمستقیم داخل bring_up، قبل از crawler</td>
+          </tr>
+          <tr>
+            <td><code>check_infra.sh</code></td>
+            <td><a href="script-check-infra.html">مستند</a></td>
+            <td>گام اجباری سلامت بعد از bring_up</td>
+          </tr>
+          <tr>
+            <td><code>run_tests_in_docker.sh</code></td>
+            <td><a href="script-run-tests-in-docker.html">مستند</a></td>
+            <td>اختیاری قبل از bring_up؛ جایگزین health live نیست</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <hr>
+      <h2 id="checklist">۱۰. چک‌لیست و نکات عملیاتی</h2>
+      <ul>
+        <li><b>هرگز</b> <code>inventory.ini</code> یا <code>group_vars/vault.yml</code> را commit نکنید.</li>
+        <li>اولین اتصال: از control node <code>ansible … -m ping</code> باید <code>pong</code> بدهد.</li>
+        <li>بعد از اولین Docker install، اگر کاربر تازه‌وارد گروه docker شده، برای session دستی SSH ممکن است یکبار logout/login لازم باشد؛ خود playbook با become/root اسکریپت‌ها را اجرا می‌کند.</li>
+        <li>تغییر رمز Postgres در Vault روی volume قدیمی دیتابیس موجود را «جادویی» عوض نمی‌کند — سیاست migrate/rotate جداگانه است؛ Vault برای رندر env و استقرارهای تازه/هم‌تراز است.</li>
+        <li>اگر <code>git</code> روی سرور به‌خاطر تغییر محلی fail شد (<code>force: false</code>)، عمدی است؛ دستی تصمیم بگیرید، نه force کور.</li>
+        <li>تست ایزوله و استک live می‌توانند هم‌زمان روی یک ماشین باشند، ولی در playbook تست را قبل از bring_up می‌گذاریم تا تداخل کمتر شود.</li>
+        <li>برای درک جزئیات Compose و seed، این صفحه را همراه <a href="script-bring-up.html">bring_up</a> و <a href="scripts.html">فهرست اسکریپت‌ها</a> بخوانید.</li>
+      </ul>
+
+      <p align="justify"><b>جمع‌بندی یک خطی:</b> Ansible سرور را آماده و کد/.env را تحویل می‌دهد؛ اسکریپت‌های پروژه استک را درست و idempotent بالا می‌آورند؛ <code>check_infra</code> مهر سلامت می‌زند؛ تست Docker اختیاری و جدا از استک live است.</p>
+
+      <hr>
+      <p><a href="index.html">← خانه</a> · <a href="script-bring-up.html">bring_up.sh</a> · <a href="script-run-tests-in-docker.html">run_tests_in_docker.sh</a> · <a href="scripts.html">اسکریپت‌ها</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>Project Technical Documentation</footer>
+</body>
+</html>
