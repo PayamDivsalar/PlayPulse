@@ -19,8 +19,10 @@
       <a href="database-schema.html">Database Schema</a>
       <a href="infra-setup.html">Infrastructure</a>
       <a href="crawler.html">Crawler</a>
+      <a href="network-analyzer.html">Network Analyzer</a>
       <a href="storage-consumer.html">Storage Consumer</a>
       <a href="sentiment.html">Sentiment</a>
+      <a href="ansible.html">Ansible</a>
       <a href="scripts.html">Scripts</a>
     </nav>
   </div>
@@ -30,7 +32,7 @@
   <section class="hero">
     <span class="eyebrow">PROJECT DOCUMENTATION</span>
     <h1>مجموعه مستندات فنی پروژه</h1>
-    <p>این مجموعه، معماری نرم‌افزار، طراحی پایگاه‌داده، جمع‌آوری داده، تحلیل احساس، اعتبارسنجی زیرساخت و اسکریپت‌های عملیاتی پروژه را در قالب یک مرجع یکپارچه مستند می‌کند.</p>
+    <p>این مجموعه، معماری نرم‌افزار، طراحی پایگاه‌داده، جمع‌آوری داده، تحلیل ترافیک شبکه، تحلیل احساس، استقرار production با Ansible، اعتبارسنجی زیرساخت و اسکریپت‌های عملیاتی پروژه را در قالب یک مرجع یکپارچه مستند می‌کند.</p>
   </section>
 
   <section class="cards">
@@ -62,6 +64,13 @@
       <p>مدل همزمانی، Rate Limiting، Dependency Injection، فلوی کامل خزش، قرارداد داده و استراتژی تست زیرسیستم کراولر.</p>
       <span class="go">مشاهده مستند ←</span>
     </a>
+    <a class="doc-card" href="network-analyzer.html">
+      <div class="card-icon">◎</div>
+      <span class="card-tag">NETWORK · PCAP</span>
+      <h2>Network Analyzer</h2>
+      <p>هستهٔ خالص تحلیل PCAP، شاخص‌های کیفیت و حجم شبکه، متدولوژی ضبط PCAPdroid، انتشار به Kafka و استراتژی تست Unit/Oracle/Live.</p>
+      <span class="go">مشاهده مستند ←</span>
+    </a>
     <a class="doc-card" href="storage-consumer.html">
       <div class="card-icon">◉</div>
       <span class="card-tag">DATA PERSISTENCE</span>
@@ -74,6 +83,13 @@
       <span class="card-tag">NLP · ANALYSIS</span>
       <h2>Sentiment Analysis</h2>
       <p>Job دسته‌ای طبقه‌بندی احساس نقدها با Cardiff XLM-R، مالکیت ستون reviews.sentiment، اجرا در venv/Docker و استراتژی تست Unit/Integration/Smoke.</p>
+      <span class="go">مشاهده مستند ←</span>
+    </a>
+    <a class="doc-card" href="ansible.html">
+      <div class="card-icon">⬡</div>
+      <span class="card-tag">OPS · DEPLOY</span>
+      <h2>Ansible Production Deploy</h2>
+      <p>استقرار خودکار روی Ubuntu: نصب Docker، clone/pull، رندر امن <code>.env</code> از Vault، bring_up مرحله‌ای، smoke، و تست ایزولهٔ اختیاری.</p>
       <span class="go">مشاهده مستند ←</span>
     </a>
     <a class="doc-card" href="scripts.html">
@@ -92,11 +108,13 @@
       <div>Data</div><span>→</span>
       <div>Infrastructure</div><span>→</span>
       <div>Collection</div><span>→</span>
+      <div>Network</div><span>→</span>
       <div>Persistence</div><span>→</span>
       <div>Sentiment</div><span>→</span>
+      <div>Ansible</div><span>→</span>
       <div>Scripts</div>
     </div>
-    <p>این اسناد مستقل، در کنار هم یک تصویر یکپارچه از لایه‌های اصلی پروژه ارائه می‌دهند: از معماری و مدل داده تا جمع‌آوری، ماندگارسازی، تحلیل احساس و عملیات روزمره.</p>
+    <p>این اسناد مستقل، در کنار هم یک تصویر یکپارچه از لایه‌های اصلی پروژه ارائه می‌دهند: از معماری و مدل داده تا جمع‌آوری، تحلیل شبکه، ماندگارسازی، تحلیل احساس، استقرار production و عملیات روزمره.</p>
   </section>
 </main>
 

@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="مستند فنی زیرسیستم استخراج اطلاعات شبکه‌ای (Network Analyzer)">
+<title>Network Analyzer | مستند فنی</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="network-analyzer.css">
+</head>
+
+<body>
+<a class="portal-back" href="index.html">← مجموعه مستندات پروژه</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <span class="eyebrow">PCAP ANALYSIS · PURE CORE · KAFKA PUBLISH</span>
+    <h1>زیرسیستم استخراج اطلاعات شبکه‌ای <span>(Network Analyzer)</span></h1>
+    <p>تحلیل فایل‌های PCAP ضبط‌شده با PCAPdroid برای اپ‌های پیام‌رسان (سناریوهای آپلود و دانلود)، محاسبهٔ شاخص‌های کیفیت و حجم شبکه، و انتشار نتیجه به Kafka — بدون اتصال مستقیم به PostgreSQL.</p>
+
+    <div class="hero-metrics" aria-label="Network Analyzer characteristics">
+      <div class="metric"><strong>Pure core</strong><span>analysis/ بدون I/O</span></div>
+      <div class="metric"><strong>9 metrics</strong><span>کیفیت TCP + حجم IP</span></div>
+      <div class="metric"><strong>Kafka only</strong><span>بدون Postgres</span></div>
+      <div class="metric"><strong>200+ tests</strong><span>Unit · Oracle · Live</span></div>
+    </div>
+  </div>
+</header>
+
+<nav class="top-nav" aria-label="ناوبری مستند">
+  <div class="nav-inner">
+    <a class="active" href="#pure-core">۱. هستهٔ خالص</a>
+    <a href="#layout">۲. ساختار</a>
+    <a href="#capture">۳. ضبط</a>
+    <a href="#metrics">۴. شاخص‌ها</a>
+    <a href="#oracle-bug">۵. باگ Oracle</a>
+    <a href="#flow">۶. فلوی اجرا</a>
+    <a href="#contract">۷. قرارداد داده</a>
+    <a href="#pcap-formats">۸. فرمت PCAP</a>
+    <a href="#exit-codes">۹. Exit Code</a>
+    <a href="#run">۱۰. اجرا</a>
+    <a href="#testing">۱۱. تست</a>
+    <a href="#scripts">۱۲. اسکریپت‌ها</a>
+    <a href="#decisions">۱۳. تصمیمات</a>
+    <a href="#technologies">۱۴. تکنولوژی‌ها</a>
+  </div>
+</nav>
+
+<main class="container">
+
+<section class="intro">
+  <p>این مستند معماری، فلوی اجرا، متدولوژی ضبط داده، تعریف دقیق شاخص‌ها، و تصمیمات مهندسی زیرسیستم تحلیل ترافیک شبکه را شرح می‌دهد. این زیرسیستم فایل‌های PCAP ضبط‌شده با PCAPdroid را برای اپلیکیشن‌های دسته‌ی گپ‌وگفت (در دو سناریوی آپلود و دانلود) تحلیل می‌کند، شاخص‌های کیفیت و حجم شبکه را محاسبه می‌کند، و نتیجه را به تاپیک <code>network-metrics</code> در Kafka منتشر می‌کند.</p>
+  <p>نقش آن در زنجیرهٔ داده مکمل Crawler است: یکی آمار و نقد Play Store را می‌آورد، دیگری کیفیت شبکهٔ واقعی روی گوشی را می‌سنجد. ماندگارسازی هر دو مسیر را <a href="storage-consumer.html">Storage Consumer</a> انجام می‌دهد.</p>
+</section>
+
+<section id="pure-core">
+  <h2><span class="section-number">۱</span> تصمیم معماری بنیادین: هسته‌ی تحلیل کاملاً خالص و مستقل از I/O</h2>
+  <p>مهم‌ترین تصمیم طراحی این زیرسیستم است: پوشه‌ی <code>analysis/</code> فقط به <code>dpkt</code>، کتابخانه‌ی استاندارد پایتون، و مدل دامنه (<code>core/models.py</code>) وابسته است — هیچ‌گاه Kafka، HTTP، یا Config را import نمی‌کند. این تفکیک دقیقاً همان چیزی است که اجازه داد Milestoneهای خواندن پکت و محاسبه‌ی شاخص‌ها کاملاً بدون روشن بودن هیچ زیرساختی (نه Kafka، نه App API) ساخته و با صدها Synthetic PCAP تست شوند.</p>
+
+  <div class="diagram-card"><div class="mermaid">
+flowchart TB
+    subgraph Pure["هسته‌ی خالص — بدون I/O"]
+        PR[packet_reader.py<br/>DLT dispatch + PCAPdroid trailer strip]
+        TCP[tcp_analyzer.py<br/>RTT, Retrans, OOO, Spurious, ZWin, RST]
+        VOL[volume_analyzer.py<br/>Bytes Total, Payload]
+        MC[metrics_calculator.py<br/>ترکیب + Overhead Ratio]
+        PR --> TCP
+        PR --> VOL
+        TCP --> MC
+        VOL --> MC
+    end
+
+    subgraph IO["لایه‌های I/O"]
+        MSG[messaging/kafka_publisher.py]
+        CLI[clients/app_registry_client.py]
+        RT[runtime/analyzer_service.py]
+    end
+
+    MC --> RT
+    RT --> CLI
+    RT --> MSG
+
+    style Pure fill:#16a34a,color:#fff
+    style IO fill:#2563eb,color:#fff
+  </div></div>
+
+  <div class="callout"><strong>پیامد عملی:</strong> چون <code>analysis/</code> هیچ وابستگی بیرونی ندارد، بیش از ۲۰۰ تست Unit و تست‌های Oracle در کمتر از چند ثانیه اجرا می‌شوند، بدون نیاز به هیچ کانتینر یا بروکری. همین مرز، پایهٔ استراتژی تست سه‌لایه در بخش ۱۱ است.</div>
+</section>
+
+<section id="layout">
+  <h2><span class="section-number">۲</span> ساختار پوشه (پس از بازآرایی معماری)</h2>
+  <p>مطابق همان الگوی معماری که در <code>storage_consumer</code> پیاده‌سازی شد (جداسازی بر اساس مسئولیت و جهت وابستگی)، ساختار نهایی این زیرسیستم چنین است:</p>
+
+  <div class="diagram-card"><div class="mermaid">
+flowchart TD
+    Main["main.py<br/>(CLI + Composition Root)"] --> Config[config.py]
+    Main --> Runtime["runtime/analyzer_service.py<br/>validate → analyze → publish"]
+    Runtime --> Core["core/<br/>models.py, message_mapper.py,<br/>filename_parser.py"]
+    Runtime --> Analysis["analysis/<br/>هسته‌ی خالص"]
+    Runtime --> Messaging["messaging/<br/>kafka_publisher.py"]
+    Runtime --> Clients["clients/<br/>app_registry_client.py"]
+    Runtime --> Common["common/<br/>retry_policy.py"]
+
+    style Analysis fill:#16a34a,color:#fff
+    style Core fill:#7c3aed,color:#fff
+    style Messaging fill:#f59e0b,color:#fff
+    style Clients fill:#f59e0b,color:#fff
+  </div></div>
+
+  <div class="layer-grid">
+    <article class="layer-card">
+      <div class="layer-kicker">ANALYSIS</div>
+      <h3>هستهٔ خالص</h3>
+      <p><code>packet_reader</code>، <code>tcp_analyzer</code>، <code>volume_analyzer</code>، <code>metrics_calculator</code> — فقط پکت به متریک؛ بدون شبکه.</p>
+    </article>
+    <article class="layer-card">
+      <div class="layer-kicker">CORE</div>
+      <h3>دامنه و قرارداد</h3>
+      <p>مدل‌های immutable، پارسر نام فایل، و <code>message_mapper</code> خالص که شکل JSON تاپیک را تعریف می‌کند.</p>
+    </article>
+    <article class="layer-card">
+      <div class="layer-kicker">I/O</div>
+      <h3>messaging + clients</h3>
+      <p>دو نوع ارتباط بیرونی عمداً جدا شده‌اند: Kafka برای خروجی، HTTP برای اعتبارسنجی App API.</p>
+    </article>
+    <article class="layer-card">
+      <div class="layer-kicker">RUNTIME</div>
+      <h3>Composition Root</h3>
+      <p><code>main.py</code> اشیاء واقعی را می‌سازد؛ <code>analyzer_service</code> use-case را اجرا می‌کند: validate → analyze → publish.</p>
+    </article>
+  </div>
+
+  <div class="callout"><strong>نکته‌ی طراحی:</strong> برخلاف <code>storage_consumer</code> که فقط یک نوع I/O بیرونی (Kafka) داشت، این زیرسیستم دو نوع کاملاً متفاوت دارد — Kafka (خروجی نتیجه) و HTTP به App API (اعتبارسنجی اپلیکیشن) — که عمداً در دو پوشه‌ی جدا (<code>messaging/</code> و <code>clients/</code>) نگه داشته شده‌اند، چون ماهیت و الگوی خطای این دو نوع ارتباط با هم فرق دارد.</div>
+</section>
+
+<section id="capture">
+  <h2><span class="section-number">۳</span> متدولوژی ضبط: از گوشی تا فایل PCAP قابل تحلیل</h2>
+  <p>صحت اندازه‌گیری، پیش از هر خط کد، به نحوه‌ی ضبط بستگی دارد. سه اصل رعایت شده است:</p>
+
+  <div class="diagram-card"><div class="mermaid">
+flowchart TD
+    A["اپ را Force Stop کن<br/>(نه فقط بستن از Recent Apps)"] --> B["دلیل: اتصال Persistent/Keep-Alive<br/>ممکن است زنده بماند و Handshake از دست برود"]
+    B --> C["ضبط PCAPdroid را شروع کن"]
+    C --> D["اپ را باز کن (Handshake اینجا ثبت می‌شود)"]
+    D --> E["صبر کوتاه تا ترافیک Cold Start<br/>(Sync، Auth، Presence) آرام بگیرد"]
+    E --> F["فقط حالا عملیات هدف<br/>(ارسال/دریافت فایل) را انجام بده"]
+    F --> G["بلافاصله ضبط را متوقف کن"]
+
+    style A fill:#dc2626,color:#fff
+    style F fill:#16a34a,color:#fff
+  </div></div>
+
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>ملاحظه</th><th>توضیح</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>چرا Force Stop لازم است</strong></td>
+        <td>اکثر اپ‌های پیام‌رسان از اتصال TCP پایدار برای Push Notification استفاده می‌کنند؛ بدون Force Stop، ممکن است اصلاً Handshake جدیدی در Capture ثبت نشود و <code>rtt_handshake</code> برابر <code>null</code> بماند.</td>
+      </tr>
+      <tr>
+        <td><strong>Trade-off اجتناب‌ناپذیر</strong></td>
+        <td>برای ثبت Handshake، ضبط باید از لحظه‌ی باز شدن اپ شروع شود؛ این یعنی مقداری ترافیک راه‌اندازی (Login/Sync/Presence) وارد فایل می‌شود که در <code>bytes_transferred_total</code> منعکس می‌شود. این محدودیت به‌جای حذف کامل، صادقانه در تفسیر نتایج ذکر می‌شود.</td>
+      </tr>
+      <tr>
+        <td><strong>محدودیت شناخته‌شده‌ی دیگر</strong></td>
+        <td>متریک‌های کیفیت (RTT، Retransmission، Out-of-order، Spurious، Zero-Window، RST) فقط TCP هستند؛ متریک‌های حجم کل ترافیک IP از جمله QUIC/UDP را شامل می‌شوند. یک اپ مبتنی بر QUIC می‌تواند حجم بالا و Retransmission نزدیک صفر نشان دهد — این رفتار طبیعی پروتکل است، نه نقص Parser.</td>
+      </tr>
+      <tr>
+        <td><strong>قرارداد نام فایل</strong></td>
+        <td><code>&lt;package&gt;__&lt;upload|download&gt;__&lt;YYYYMMDDTHHMMSS&gt;.pcap</code> — جداکنندهٔ دو زیرخط چون <code>.</code> و <code>_</code> داخل نام پکیج اندروید مجازند. timestamp فقط اطلاعاتی است و به قرارداد Kafka نمی‌رسد (ساعت گوشی قابل اعتماد نیست).</td>
+      </tr>
+      <tr>
+        <td><strong>یک سناریو در هر فایل</strong></td>
+        <td>هر Capture دقیقاً یک عملیات هدف (ارسال یا دریافت فایل) دارد. Target apps در PCAPdroid روی همان اپ تنظیم شود تا ترافیک دیگران مخلوط نشود.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="metrics">
+  <h2><span class="section-number">۴</span> تعریف دقیق شاخص‌ها — قطعی در برابر Heuristic</h2>
+  <p>تفکیک صادقانه‌ی این‌که کدام شاخص خواندن مستقیم یک فیلد پروتکل است و کدام یک تخمین مهندسی‌شده، برای اعتبار علمی نتایج ضروری است. گروه ۱ فقط TCP را می‌بیند؛ گروه ۲ همه‌ی ترافیک IP را.</p>
+
+  <h3>گروه ۱ — کیفیت و پایداری شبکه (فقط TCP)</h3>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>شاخص</th><th>نوع</th><th>تعریف دقیق</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>rtt_handshake</code></td>
+        <td>قطعی، با قرارداد خاص پروژه</td>
+        <td>میانگین <code>t(SYN-ACK) − t(SYN اولیه)</code> بر حسب میلی‌ثانیه. عمداً از <strong>اولین</strong> SYN حساب می‌شود، نه آخرین تلاش — چون تعریف سند («از بسته‌ی اولیه») می‌خواهد افت و تاخیر ناشی از بسته‌های گم‌شده در عدد نهایی منعکس شود، برخلاف الگوریتم کلاسیک Karn که چنین نمونه‌ای را کنار می‌گذارد. این متریک صرفاً سطح TCP را می‌سنجد؛ نه TLS Handshake و نه لحظه‌ی Established کامل (ACK نهایی) را. اگر هیچ Handshake کاملی در فایل نباشد → <code>null</code>.</td>
+      </tr>
+      <tr>
+        <td><code>zero_window_count</code></td>
+        <td>قطعی</td>
+        <td>بسته‌های TCP با <code>window == 0</code>، به‌استثنای SYN (که Window اولیه هنوز معنا ندارد) و RST (که فیلد Window در آن بی‌معناست).</td>
+      </tr>
+      <tr>
+        <td><code>tcp_reset_count</code></td>
+        <td>قطعی</td>
+        <td>شمارش مستقیم بسته‌های دارای پرچم RST.</td>
+      </tr>
+      <tr>
+        <td><code>retransmission_count</code></td>
+        <td>Heuristic (صریحاً مستندشده)</td>
+        <td>به ازای هر جهت جریان، map بازه‌های sequence پوشش‌داده‌شده نگه داشته می‌شود. بسته‌ای که بایته‌ایش قبلاً پوشش داده شده و peer هنوز ACK نکرده، Retransmission شمرده می‌شود. SYN/FIN تکراری هم شمرده می‌شوند. Out-of-order و Spurious جدا گزارش می‌شوند تا سیگنال بازیابی از دست‌رفتگی باد نکند.</td>
+      </tr>
+      <tr>
+        <td><code>out_of_order_count</code></td>
+        <td>Heuristic</td>
+        <td>سگمنت payloadدار که فقط بایت‌های جدید می‌آورد ولی از جلوی frontier پیوسته جلوتر شروع می‌شود (حفرهٔ sequence باقی می‌گذارد) — به‌جای retransmission اینجا شمرده می‌شود.</td>
+      </tr>
+      <tr>
+        <td><code>spurious_retransmission_count</code></td>
+        <td>Heuristic</td>
+        <td>سگمنت کاملاً پوشش‌داده‌شده‌ای که peer قبلاً تا انتهای آن را ACK کرده. از <code>retransmission_count</code> جداست تا resendهای غیرضروری، سیگنال loss-recovery را متورم نکنند.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>گروه ۲ — کارایی مصرف داده (کل ترافیک IP)</h3>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>شاخص</th><th>نوع</th><th>تعریف دقیق</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>bytes_transferred_total</code></td>
+        <td>قطعی، با تصمیم طراحی مهم</td>
+        <td>مجموع فیلد <code>ip.len</code> (نه طول فریم Pcap)، چون PCAPdroid با «PCAPdroid extensions» یک هدر Ethernet جعلی + Trailer ۲۸ بایتی اضافه می‌کند؛ جمع بر مبنای <code>ip.len</code> این Overhead مصنوعی را حذف و بین دو حالت DLT سازگار می‌کند.</td>
+      </tr>
+      <tr>
+        <td><code>bytes_payload_total</code></td>
+        <td>قطعی</td>
+        <td>TCP: <code>ip.len − ip_hdr_len − tcp_hdr_len</code> (با احتساب Options)؛ UDP: <code>udp.ulen − 8</code>؛ سایر: صفر.</td>
+      </tr>
+      <tr>
+        <td><code>overhead_ratio</code></td>
+        <td>مشتق</td>
+        <td><code>(total − payload) / total</code>، با محافظت در برابر تقسیم بر صفر (فایل خالی → <code>0.0</code>). در دامنه به‌صورت property محاسبه می‌شود تا هرگز با دو عدد حجمی تناقض نداشته باشد؛ روی سیم برای گزارش‌گیری materialize می‌شود.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout warn"><strong>تفسیر اعداد:</strong> اپ‌های پیام‌رسان مدرن اغلب bulk transfer را روی QUIC (UDP) می‌برند. بنابراین دیدن حجم بالا کنار Retransmission نزدیک صفر کاملاً طبیعی است. برای تمرین متریک‌های TCP، در تنظیمات اپ در صورت امکان QUIC را خاموش کنید.</div>
+</section>
+
+<section id="oracle-bug">
+  <h2><span class="section-number">۵</span> داستان یک باگ واقعی: چرا Oracle Test ارزشش را ثابت کرد</h2>
+  <p>پیاده‌سازی اولیه‌ی RTT Handshake، هنگام گم‌شدن و بازارسال یک SYN، زمان را از روی <strong>آخرین</strong> تلاش موفق حساب می‌کرد (نتیجه: ۲۰ میلی‌ثانیه‌ی گمراه‌کننده به‌جای واقعیت). تست Oracle، با مقایسه‌ی مستقیم خروجی در برابر فیلد <code>tcp.analysis.ack_rtt</code> در Wireshark روی همان فایل، این ناهم‌خوانی را آشکار کرد: Wireshark مقدار ۳۰۲۰ میلی‌ثانیه گزارش می‌داد — دقیقاً بازه‌ی واقعی که اتصال طول کشیده بود. اصلاح شد تا از اولین SYN حساب شود، همان‌طور که هدف متریک (تشخیص افت اتصال) اقتضا می‌کند.</p>
+
+  <div class="diagram-card"><div class="mermaid">
+sequenceDiagram
+    participant Client
+    participant Server
+    Client->>Server: SYN (t=0) — گم می‌شود
+    Note over Client,Server: بازه‌ی سکوت ۳ ثانیه‌ای
+    Client->>Server: SYN بازارسال‌شده (t=3000ms)
+    Server-->>Client: SYN-ACK (t=3020ms)
+    Note over Client: کد اشتباه: 3020-3000=20ms<br/>کد درست (و Wireshark): 3020-0=3020ms
+  </div></div>
+
+  <div class="callout"><strong>درس معماری:</strong> Unit test با Ground Truth مصنوعی باگ منطقی «آخرین SYN» را می‌دید اگر سناریوی retransmission SYN را تزریق می‌کرد — و کرد. Oracle ارزش اضافه‌اش این بود که تعریف متریک را با استاندارد صنعتی هم‌راستا کرد و جلوی «درست بودن نسبت به تست خودمان، غلط بودن نسبت به Wireshark» را گرفت.</div>
+</section>
+
+<section id="flow">
+  <h2><span class="section-number">۶</span> فلوی کامل یک اجرا</h2>
+  <p>اسکریپت بچ هر فایل inbox را به <code>main.py</code> می‌سپارد؛ سرویس Composition‌شده مسیر validate → analyze → publish را طی می‌کند.</p>
+
+  <div class="diagram-card"><div class="mermaid">
+sequenceDiagram
+    participant Script as scripts/analyze_pcaps.sh
+    participant Main as main.py
+    participant FP as filename_parser
+    participant ARC as AppRegistryClient
+    participant PR as packet_reader
+    participant TCP as tcp_analyzer
+    participant VOL as volume_analyzer
+    participant MC as metrics_calculator
+    participant MM as message_mapper
+    participant KP as kafka_publisher
+
+    Script->>Main: برای هر فایل در inbox/
+    Main->>FP: استخراج package_name و scenario از نام فایل
+    Main->>ARC: اعتبارسنجی (وجود، is_active، is_messaging_app)
+    alt نامعتبر
+        ARC-->>Main: رد شود (خطای پیکربندی، بدون Retry)
+        Main->>Script: انتقال فایل به failed/ + لاگ خطا
+    else معتبر
+        Main->>PR: خواندن پکت به پکت (DLT dispatch + strip Trailer)
+        PR->>TCP: هر پکت TCP
+        PR->>VOL: هر پکت IP
+        TCP->>MC: شاخص‌های TCP
+        VOL->>MC: ۲ شاخص حجمی
+        MC->>MM: NetworkMetrics کامل
+        MM->>KP: پیام JSON (snake_case + analysis_id + analyzed_at)
+        KP->>Script: موفقیت
+        Script->>Script: انتقال فایل به processed/
+    end
+  </div></div>
+
+  <div class="guarantee-grid">
+    <article class="guarantee">
+      <span class="g-num">VALIDATE</span>
+      <h3>اعتبارسنجی قبل از تحلیل</h3>
+      <p>App API چک می‌کند اپ وجود دارد، فعال است، و <code>is_messaging_app</code> است. نام پکیج غلط در چند ثانیه روی ترمینال می‌میرد، نه هفته‌ها بعد در لاگ Consumer.</p>
+      <span class="g-mech">مکانیزم: <code>AppRegistryClient</code> + فلگ <code>--skip-registry-check</code> برای کار آفلاین</span>
+    </article>
+    <article class="guarantee">
+      <span class="g-num">PUBLISH</span>
+      <h3>انتشار، نه ماندگارسازی</h3>
+      <p>Analyzer هرگز به Postgres وصل نمی‌شود. سند صراحتاً ماندگاری را به Storage واگذار کرده؛ یک کامپوننت مالک اعتبارنامه و migration می‌ماند.</p>
+      <span class="g-mech">مکانیزم: تاپیک <code>network-metrics</code>، کلید = <code>package_name</code></span>
+    </article>
+  </div>
+</section>
+
+<section id="contract">
+  <h2><span class="section-number">۷</span> قرارداد داده و تصمیمات کلیدی سیم</h2>
+  <p>این بخش اینترفیسی است که Storage Consumer روی آن پیاده‌سازی می‌کند. سبک پیام با Crawler یکی است: کلید پکیج، مقدار JSON تخت و snake_case، بدون envelope از نوع <code>{type, payload}</code>.</p>
+
+  <div class="diagram-card" style="direction:ltr;text-align:left;font-family:Consolas,monospace;white-space:pre;line-height:1.7;font-size:.88rem;color:#0f172a">
+{
+  "analysis_id": "8f14e45f-ea6a-4f2b-9c1d-2b3a5c7d9e01",
+  "package_name": "com.whatsapp",
+  "scenario": "UPLOAD",
+  "rtt_handshake": 43.12,
+  "retransmission_count": 7,
+  "out_of_order_count": 1,
+  "spurious_retransmission_count": 0,
+  "zero_window_count": 0,
+  "tcp_reset_count": 2,
+  "bytes_transferred_total": 18234123,
+  "bytes_payload_total": 17540221,
+  "overhead_ratio": 0.038,
+  "source_pcap_filename": "com.whatsapp__upload__20260907T141500.pcap",
+  "analyzed_at": "2026-09-07T14:20:11+00:00"
+}
+  </div>
+
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>فیلد</th><th>یادداشت</th></tr></thead>
+    <tbody>
+      <tr><td><code>analysis_id</code></td><td>UUID4 یکتا به‌ازای هر تحلیل — کلید Idempotency برای <code>ON CONFLICT DO NOTHING</code> در Consumer. Kafka At-Least-Once است؛ بدون این فیلد، Replay فایل ردیف تکراری می‌ساخت و نمودارهای روند را خراب می‌کرد.</td></tr>
+      <tr><td><code>analyzed_at</code></td><td>در سمت Analyzer ثبت می‌شود، نه <code>auto_now_add</code> در دیتابیس — معنای «چه زمانی تحلیل واقعاً اجرا شد» را حفظ می‌کند، نه «چه زمانی Consumer پیام را خواند» (همان اصل <code>crawled_at</code> در Crawler).</td></tr>
+      <tr><td><code>package_name</code></td><td>هرگز <code>application_id</code> ارسال نمی‌شود؛ resolve کلید خارجی مال مالکی اسکیما است.</td></tr>
+      <tr><td><code>scenario</code></td><td>فقط <code>UPLOAD</code> یا <code>DOWNLOAD</code>.</td></tr>
+      <tr><td><code>rtt_handshake</code></td><td>float یا JSON <code>null</code>؛ تا ۳ رقم اعشار.</td></tr>
+      <tr><td>فیلدهای داخلی CLI</td><td><code>packet_count</code> و <code>handshake_sample_count</code> فقط برای گزارش stdout هستند و عمداً روی سیم نمی‌آیند تا Consumer به ستونی که در DB نیست وابسته نشود.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="pcap-formats">
+  <h2><span class="section-number">۸</span> فرمت‌های ضبط PCAPdroid و انتخاب <code>ip.len</code></h2>
+  <p>PCAPdroid فایل را در یکی از دو شکل می‌نویسد. Reader با dispatch روی link-type هدر فایل هر دو را پشتیبانی می‌کند:</p>
+
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>Link type</th><th>چه موقع</th><th>رفتار Reader</th></tr></thead>
+    <tbody>
+      <tr><td><code>101</code> (raw IP)</td><td>پیش‌فرض، از جمله root mode</td><td>رکورد از هدر IP شروع می‌شود.</td></tr>
+      <tr><td><code>1</code> (Ethernet)</td><td>فعال بودن «PCAPdroid extensions»</td><td>هدر Ethernet جعلی + trailer حاوی UID و نام پکیج؛ trailer قبل از Parse IP جدا می‌شود.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout"><strong>جزئیات ظریف dpkt:</strong> مقایسه با اعداد literal انجام می‌شود نه ثابت‌های <code>DLT_*</code> کتابخانه، چون <code>Reader.datalink()</code> مقدار هدر فایل را برمی‌گرداند در حالی که <code>dpkt.pcap.DLT_RAW</code> ثابت سبک BSD پلتفرم است (<code>12</code>، نه <code>101</code>).</div>
+  <p>جمع بر مبنای <code>ip.len</code> حدود ۴۶ بایت bookkeeping مصنوعی به‌ازای هر پکت (هدر جعلی + padding + trailer + checksum) را حذف می‌کند، بین دو حالت DLT یکسان می‌ماند، و نسبت به truncation ناشی از snaplen مقاوم‌تر است.</p>
+</section>
+
+<section id="exit-codes">
+  <h2><span class="section-number">۹</span> Exit Codeها و مسیریابی بچ</h2>
+  <p>اسکریپت <code>analyze_pcaps.sh</code> بر اساس کد خروج Analyzer تصمیم می‌گیرد فایل کجا برود. شکاف بین کد ۵ و بقیه حیاتی است: بروکر قطع‌شده نباید Capture سالم را قرنطینه کند، و فایل معیوب نباید تا ابد Retry شود.</p>
+
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>کد</th><th>معنا</th><th>رفتار اسکریپت بچ</th></tr></thead>
+    <tbody>
+      <tr><td class="exit-ok">0</td><td>تحلیل و انتشار موفق</td><td>انتقال به <code>processed/</code></td></tr>
+      <tr><td class="exit-fail">1</td><td>خطای پیکربندی یا غیرمنتظره</td><td>انتقال به <code>failed/</code> + فایل <code>.log</code></td></tr>
+      <tr><td class="exit-fail">2</td><td>خطای usage آرگومان (argparse)</td><td>انتقال به <code>failed/</code> + لاگ</td></tr>
+      <tr><td class="exit-fail">3</td><td>نام فایل بد یا اپ غیرمجاز</td><td>انتقال به <code>failed/</code> + لاگ</td></tr>
+      <tr><td class="exit-fail">4</td><td>Capture خوانا نیست</td><td>انتقال به <code>failed/</code> + لاگ</td></tr>
+      <tr><td class="exit-retry">5</td><td>Kafka یا App API در دسترس نیست</td><td><strong>فایل در inbox می‌ماند</strong> برای تلاش مجدد</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="run">
+  <h2><span class="section-number">۱۰</span> نحوهٔ اجرا (Host، اسکریپت، Docker)</h2>
+  <p>این زیرسیستم یک Job دسته‌ای on-demand است، نه Daemon. پشت پروفایل Compose به نام <code>tools</code> است تا <code>docker compose up</code> معمولی آن را بالا نیاورد.</p>
+
+  <h3>۱۰.۱ تحلیل تک‌فایل روی Host</h3>
+  <div class="diagram-card" style="direction:ltr;text-align:left;font-family:Consolas,monospace;white-space:pre;line-height:1.7;font-size:.9rem;color:#0f172a">
+python -m venv .venv-analyzer
+.venv-analyzer/bin/pip install -r network_analyzer/requirements.txt
+cp network_analyzer/.env.example network_analyzer/.env
+
+# نام فایل کافی است
+python -m network_analyzer.main --file data/pcap/inbox/com.whatsapp__upload__20260907T141500.pcap
+
+# override برای فایلی که نمی‌توان تغییر نام داد
+python -m network_analyzer.main --file capture.pcap --package com.whatsapp --scenario UPLOAD
+
+# کاملاً آفلاین: بدون broker، بدون App API، بدون .env
+python -m network_analyzer.main --file capture.pcap --dry-run --skip-registry-check
+  </div>
+
+  <h3>۱۰.۲ بچ روی Host</h3>
+  <div class="diagram-card" style="direction:ltr;text-align:left;font-family:Consolas,monospace;white-space:pre;line-height:1.7;font-size:.9rem;color:#0f172a">
+./scripts/network/analyze_pcaps.sh
+./scripts/network/analyze_pcaps.sh --dry-run --skip-registry-check --keep
+./scripts/network/analyze_pcaps.sh --inbox ~/Downloads/PCAPdroid
+  </div>
+
+  <h3>۱۰.۳ Docker — الگوی Dispatcher</h3>
+  <p><code>docker-entrypoint.sh</code> بر اساس آرگومان اول بین بچ کل <code>inbox/</code> (پیش‌فرض / <code>--batch</code>) و تحلیل تک‌فایل (<code>--file …</code>) سوییچ می‌کند — همان الگوی Imageهای رسمی Postgres برای یک Image با چند حالت استفاده، بدون نیاز به دو Image جدا.</p>
+
+  <div class="diagram-card" style="direction:ltr;text-align:left;font-family:Consolas,monospace;white-space:pre;line-height:1.7;font-size:.9rem;color:#0f172a">
+docker compose --profile tools build network-analyzer
+
+# پیش‌فرض: بچ روی /data/pcap/inbox
+docker compose --profile tools run --rm network-analyzer
+
+# بچ با فلگ
+docker compose --profile tools run --rm network-analyzer --batch --dry-run --keep
+
+# تک‌فایل (مسیر داخل کانتینر)
+docker compose --profile tools run --rm network-analyzer \
+  --file /data/pcap/inbox/com.whatsapp__upload__20260907T141500.pcap
+  </div>
+
+  <div class="callout"><strong>تفکیک env:</strong> فایل <code>network_analyzer/.env</code> برای Host است (<code>localhost:9092</code>). کانتینر از <code>docker-compose.yml</code> مقادیر شبکهٔ داخلی می‌گیرد (<code>kafka:29092</code>، <code>http://app-api:8000</code>). پوشهٔ <code>./data/pcap</code> به <code>/data/pcap</code> bind می‌شود.</div>
+</section>
+
+<section id="testing">
+  <h2><span class="section-number">۱۱</span> استراتژی تست سه‌لایه</h2>
+
+  <div class="diagram-card"><div class="mermaid">
+flowchart TD
+    A["Unit Tests<br/>Synthetic PCAP با scapy.wrpcap<br/>Ground Truth دقیق"] --> B["Oracle Tests<br/>مقایسه با tshark<br/>marker: oracle"]
+    B --> C["Live Tests<br/>App API و Kafka واقعی<br/>marker: live"]
+    C --> D["End-to-End دستی<br/>Capture واقعی PCAPdroid<br/>تا مشاهده در Kafka UI"]
+
+    style A fill:#16a34a,color:#fff
+    style B fill:#f59e0b,color:#fff
+    style C fill:#dc2626,color:#fff
+    style D fill:#7c3aed,color:#fff
+  </div></div>
+
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>لایه</th><th>چه چیزی را تضمین می‌کند</th></tr></thead>
+    <tbody>
+      <tr><td>Unit (Synthetic)</td><td>منطق داخلی با Ground Truth کنترل‌شده مطابقت دارد؛ سریع، قطعی، بدون فایل باینری Commit‌شده. تعداد دقیق retransmission / zero-window / RST تزریق و assert می‌شود.</td></tr>
+      <tr><td>Contract</td><td><code>message_mapper</code> شکل JSON سیم را بدون نیاز به broker ثابت نگه می‌دارد.</td></tr>
+      <tr><td>Oracle (tshark)</td><td>خروجی با ابزار مستقل صنعتی هم‌خوان است؛ همین لایه باگ واقعی RTT را کشف کرد. بدون tshark به‌صورت خودکار skip می‌شود.</td></tr>
+      <tr><td>Live</td><td>فرض‌های Mock دربارهٔ App API و Kafka در دنیای واقعی هم برقرارند.</td></tr>
+      <tr><td>End-to-End دستی</td><td>کل زنجیره (ضبط واقعی → تحلیل → Kafka → در نهایت Storage) با هم کار می‌کند.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>۱۱.۱ اجرا روی Host</h3>
+  <div class="diagram-card" style="direction:ltr;text-align:left;font-family:Consolas,monospace;white-space:pre;line-height:1.7;font-size:.9rem;color:#0f172a">
+# سریع — پیش‌فرض CI محلی
+python -m pytest network_analyzer/tests/ -q -m "not live and not oracle"
+
+# Oracle — نیاز به tshark
+python -m pytest network_analyzer/tests/ -q -m oracle
+
+# Live — نیاز به Kafka و App API روشن
+python -m pytest network_analyzer/tests/ -q -m live
+  </div>
+
+  <h3>۱۱.۲ اجرا در Docker (پروفایل <code>test</code>)</h3>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>سرویس Compose</th><th>محتوا</th><th>Image</th></tr></thead>
+    <tbody>
+      <tr><td><code>network-analyzer-tests</code></td><td>Unit + Contract (<code>not live and not oracle</code>)</td><td>Dockerfile معمولی</td></tr>
+      <tr><td><code>network-analyzer-tests-live</code></td><td>مارکر <code>live</code> روی شبکهٔ Compose</td><td>همان Image</td></tr>
+      <tr><td><code>network-analyzer-tests-oracle</code></td><td>مارکر <code>oracle</code></td><td><code>Dockerfile.test</code> با tshark</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="diagram-card" style="direction:ltr;text-align:left;font-family:Consolas,monospace;white-space:pre;line-height:1.7;font-size:.9rem;color:#0f172a">
+docker compose --profile test run --rm network-analyzer-tests
+docker compose --profile test run --rm network-analyzer-tests-live
+docker compose --profile test run --rm network-analyzer-tests-oracle
+
+# یا ارکستراتور کلی پروژه
+./scripts/run_tests_in_docker.sh
+  </div>
+</section>
+
+<section id="scripts">
+  <h2><span class="section-number">۱۲</span> اسکریپت‌ها و نقاط اتصال مرتبط</h2>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>مسیر</th><th>ارتباط با Network Analyzer</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><a href="script-analyze-pcaps.html"><code>scripts/network/analyze_pcaps.sh</code></a></td>
+        <td>بچ روی inbox؛ مسیریابی فایل بر اساس exit code.</td>
+      </tr>
+      <tr>
+        <td><a href="script-verify-network-metrics.html"><code>scripts/verify/verify_network_metrics.sh</code></a></td>
+        <td>تأیید انتشار روی تاپیک (قبل/مکمل persist در Storage).</td>
+      </tr>
+      <tr>
+        <td><a href="script-run-tests-in-docker.html"><code>scripts/run_tests_in_docker.sh</code></a></td>
+        <td>صف تست‌های unit / live / oracle این زیرسیستم.</td>
+      </tr>
+      <tr>
+        <td><a href="storage-consumer.html">Storage Consumer</a></td>
+        <td>مصرف‌کنندهٔ تاپیک <code>network-metrics</code> و مالک جدول هم‌نام.</td>
+      </tr>
+      <tr>
+        <td><a href="database-schema.html">Database Schema</a></td>
+        <td>ستون‌های جدول <code>network_metrics</code> و قید Idempotency روی <code>analysis_id</code>.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="decisions">
+  <h2><span class="section-number">۱۳</span> تصمیمات کلیدی معماری</h2>
+  <div class="decision-list">
+    <article class="decision">
+      <h3>انتشار به Kafka، نه نوشتن مستقیم در Postgres</h3>
+      <p>سند صراحتاً ماندگاری دادهٔ شبکه را به زیرسیستم Storage واگذار کرده. نگه‌داشتن اعتبارنامه‌ی دیتابیس فقط در یک کامپوننت، دو سرویس مستقل را به یک اسکیمای فیزیکی مشترک وابسته نمی‌کند. پیامد جانبی: لاگ Kafka خودش آرشیو نتایج است؛ باگ mapping در Consumer با reset offset درست می‌شود، نه با ضبط دوباره روی گوشی.</p>
+    </article>
+    <article class="decision">
+      <h3>هسته‌ی خالص <code>analysis/</code></h3>
+      <p>بدون Kafka/HTTP/Config در هسته، Milestoneهای M1–M3 و صدها تست Synthetic بدون زیرساخت ممکن شد و سرعت بازخورد توسعه حفظ شد.</p>
+    </article>
+    <article class="decision">
+      <h3>افزودن <code>analysis_id</code> (UUID یکتا)</h3>
+      <p>Kafka At-Least-Once است. UUID به‌ازای هر تحلیل، <code>ON CONFLICT DO NOTHING</code> را در Consumer ممکن می‌کند بدون از بین بردن intent append-only: اجرای مجدد واقعی تست، UUID جدید و ردیف جدید می‌سازد.</p>
+    </article>
+    <article class="decision">
+      <h3><code>analyzed_at</code> در Analyzer، نه DB</h3>
+      <p>معنای زمانی تحلیل باید مستقل از زمان خواندن پیام توسط Consumer بماند — هم‌راستا با <code>crawled_at</code> در Crawler.</p>
+    </article>
+    <article class="decision">
+      <h3>جداسازی <code>messaging/</code> از <code>clients/</code></h3>
+      <p>دو I/O با الگوی خطای متفاوت (broker در برابر REST) عمداً در دو پوشه ماندند تا مرز مسئولیت شفاف بماند.</p>
+    </article>
+    <article class="decision">
+      <h3>جمع حجم روی <code>ip.len</code> نه طول فریم</h3>
+      <p>حذف overhead مصنوعی PCAPdroid extensions و سازگاری بین DLT خام و Ethernet.</p>
+    </article>
+    <article class="decision">
+      <h3>RTT از اولین SYN؛ تفکیک OOO و Spurious از Retransmission</h3>
+      <p>متریک باید افت اتصال را نشان دهد، نه فقط RTT تلاش موفق. Heuristic retransmission با interval map و peer ACK، سیگنال‌های متفاوت را قاطی نمی‌کند.</p>
+    </article>
+    <article class="decision">
+      <h3>Entrypoint Dispatcher برای Docker</h3>
+      <p>یک Image، دو حالت (بچ / تک‌فایل) — الگوی رسمی Postgres — بدون دو Dockerfile موازی.</p>
+    </article>
+    <article class="decision">
+      <h3>Exit code ۵ برای خطای حمل‌ونقل</h3>
+      <p>فایل سالم روی قطعی موقت زیرساخت قرنطینه نمی‌شود؛ فقط ورودی‌های غیرقابل‌قبول به <code>failed/</code> می‌روند.</p>
+    </article>
+    <article class="decision">
+      <h3>تکرار عامدانه‌ی <code>retry_policy</code></h3>
+      <p>مثل Crawler و Storage Consumer: هر زیرسیستم واحد استقرار مستقل است و سورس بقیه در Imageش نیست. مجموعه‌ی خطاهای قابل Retry مخصوص HTTP/Kafka این سرویس است.</p>
+    </article>
+  </div>
+</section>
+
+<section id="technologies">
+  <h2><span class="section-number">۱۴</span> ابزارها و تکنولوژی‌های استفاده‌شده</h2>
+  <div class="table-wrapper">
+  <table>
+    <thead><tr><th>ابزار</th><th>نقش</th></tr></thead>
+    <tbody>
+      <tr><td>dpkt</td><td>خواندن و Parse کردن فایل‌های PCAP در سطح بایت</td></tr>
+      <tr><td>tshark (Wireshark CLI)</td><td>Oracle مستقل برای اعتبارسنجی دقت متریک‌ها؛ فقط وابستگی توسعه، نه Production</td></tr>
+      <tr><td>scapy</td><td>ساخت Synthetic PCAP با Ground Truth دقیق برای تست‌های واحد</td></tr>
+      <tr><td>kafka-python</td><td>انتشار پیام به Topic <code>network-metrics</code></td></tr>
+      <tr><td>requests</td><td>اعتبارسنجی اپلیکیشن از طریق App API قبل از تحلیل</td></tr>
+      <tr><td>PCAPdroid</td><td>ابزار ضبط ترافیک روی گوشی اندروید (منبع ورودی)</td></tr>
+      <tr><td>pytest (+ markers)</td><td>Unit / Contract / Oracle / Live با جداسازی پیش‌نیازها</td></tr>
+      <tr><td>Docker Compose profiles <code>tools</code> / <code>test</code></td><td>Job on-demand و کانتینرهای تست بدون قاطی شدن با استک پیش‌فرض</td></tr>
+      <tr><td>python-dotenv</td><td>بارگذاری <code>network_analyzer/.env</code> در اجرای Host</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+</main>
+
+<footer>Project Technical Documentation Portal</footer>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="mermaid-config.js"></script>
+</body>
+</html>
