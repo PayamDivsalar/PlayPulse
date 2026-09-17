@@ -38,7 +38,15 @@
       <div class="card-icon">▶</div>
       <span class="card-tag">BOOTSTRAP</span>
       <h2>bring_up.sh</h2>
-      <p>راه‌اندازی یک‌دسته‌ای کل استک: آماده‌سازی <code>.env</code>، بالا آوردن Compose، انتظار برای آمادگی سرویس‌ها و Smoke Test زیرساخت.</p>
+      <p>راه‌اندازی مرحله‌ای استک: env، infra، <code>app-api</code>، seed اپ‌ها، سپس crawler / consumer — تا اولین crawl با registry پر شروع شود.</p>
+      <span class="go">مشاهده مستند ←</span>
+    </a>
+
+    <a class="doc-card" href="script-seed-apps.html">
+      <div class="card-icon">⊕</div>
+      <span class="card-tag">REGISTRY · SEED</span>
+      <h2>seed_apps.sh</h2>
+      <p>ثبت idempotent لیست اولیهٔ ۱۶ اپ از طریق App API؛ معمولاً از داخل <code>bring_up</code> قبل از crawler صدا زده می‌شود.</p>
       <span class="go">مشاهده مستند ←</span>
     </a>
 
@@ -111,10 +119,11 @@
     <h2>جریان‌های معمول</h2>
     <div class="flow" style="flex-wrap:wrap">
       <div>bring_up</div><span>→</span>
+      <div>seed_apps</div><span>→</span>
       <div>check_infra</div><span>→</span>
       <div>verify_storage</div>
     </div>
-    <p style="margin-top:1.2em">برای شبکه: <code style="direction:ltr;color:#93c5fd">analyze_pcaps</code> سپس <code style="direction:ltr;color:#93c5fd">verify_network_metrics</code>. برای گزارش چرخه: <code style="direction:ltr;color:#93c5fd">bring_up --with-cycle-reports</code>.</p>
+    <p style="margin-top:1.2em"><code style="direction:ltr;color:#93c5fd">seed_apps</code> معمولاً داخل خود <code style="direction:ltr;color:#93c5fd">bring_up</code> اجرا می‌شود (بعد از app-api، قبل از crawler). برای شبکه: <code style="direction:ltr;color:#93c5fd">analyze_pcaps</code> سپس <code style="direction:ltr;color:#93c5fd">verify_network_metrics</code>. برای گزارش چرخه: <code style="direction:ltr;color:#93c5fd">bring_up --with-cycle-reports</code>.</p>
   </section>
 </main>
 

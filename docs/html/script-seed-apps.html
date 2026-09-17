@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>seed_apps.sh | مستندات اسکریپت‌ها</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">مستندات فنی پروژه</a>
+    <nav>
+      <a href="index.html">خانه</a>
+      <a href="application-registry.html">Application Registry</a>
+      <a href="database-schema.html">Database Schema</a>
+      <a href="infra-setup.html">Infrastructure</a>
+      <a href="crawler.html">Crawler</a>
+      <a href="storage-consumer.html">Storage Consumer</a>
+      <a href="sentiment.html">Sentiment</a>
+      <a class="active" href="scripts.html">Scripts</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">
+    <span class="eyebrow">SCRIPTS · REGISTRY SEED</span>
+    <h1>seed_apps.sh — ثبت اولیهٔ اپلیکیشن‌ها</h1>
+  </div>
+
+  <article class="doc-content">
+    <div dir="rtl">
+      <p><a href="scripts.html">← بازگشت به فهرست اسکریپت‌ها</a></p>
+      <hr>
+
+      <p><b>مسیر فایل:</b> <code>scripts/seed_apps.sh</code></p>
+      <p>مستند Application Registry در <a href="application-registry.html">Application Registry</a> مدل و API را شرح می‌دهد؛ این صفحه روی خودِ اسکریپت seed تمرکز دارد.</p>
+
+      <hr>
+      <p><b>۱. کاراییش به زبان ساده</b></p>
+      <p align="justify">این اسکریپت لیست ثابت و ازپیش‌تعریف‌شدهٔ اپ‌های PlayPulse را از روی <b>host</b> (نه از داخل کانتینر دیگر) به App API ثبت می‌کند: برای هر اپ یک <code>POST /api/applications/</code> می‌زند. اگر اپ تازه ساخته شود <code>[OK]</code>، اگر از قبل وجود داشته باشد <code>[SKIP]</code> (HTTP 409)، و در غیر این صورت <code>[FAIL]</code>. اجرا <b>idempotent</b> است؛ چندبار صدا زدنش بی‌ضرر است. هدف عملیاتی‌اش این است که قبل از شروع crawler، registry خالی نباشد تا اولین چرخهٔ crawl روی همان لیست seed کار کند — نه روی صفر اپ.</p>
+
+      <hr>
+      <p><b>۲. کجا در پروژه کلی استفاده می‌شود؟</b></p>
+      <ul>
+        <li><b>خودکار داخل <a href="script-bring-up.html"><code>bring_up.sh</code></a>:</b> بعد از سبز شدن healthcheck مربوط به <code>app-api</code> و <b>قبل از</b> بالا آوردن <code>crawler</code> / <code>storage-consumer</code>.</li>
+        <li><b>دستی:</b> وقتی registry را خالی کرده‌اید، یا می‌خواهید بدون bring_up کامل فقط لیست اولیه را دوباره هم‌تراز کنید.</li>
+        <li><b>نه داخل <code>run_tests_in_docker.sh</code> برای <code>crawler-tests</code>:</b> آن سوئیت با marker <code>not live</code> و Mock کار می‌کند و به لیست واقعی DB وابسته نیست؛ seed آنجا لازم نیست.</li>
+        <li>همیشه از host به <code>localhost:${APP_API_PORT}</code> وصل می‌شود (پورت publishشدهٔ Compose)، نه به نام سرویس <code>app-api</code> داخل شبکهٔ داکر.</li>
+      </ul>
+
+      <hr>
+      <p><b>۳. چیکارا می‌کند؟</b></p>
+      <ol>
+        <li>آدرس پایه را از env می‌سازد: پیش‌فرض <code>APP_API_BASE_URL=http://localhost:${APP_API_PORT:-8000}</code>؛ هر دو متغیر قابل override هستند.</li>
+        <li>برای هر ردیف از جدول ثابت زیر، JSON با فیلدهای <code>package_name</code>، <code>display_name</code>، <code>category</code>، <code>is_messaging_app</code>، <code>is_active</code>، <code>is_iranian_app</code> می‌سازد و POST می‌کند.</li>
+        <li>کد وضعیت را گزارش می‌کند (سبک رنگی شبیه <code>check_infra.sh</code>):
+          <ul>
+            <li><b>[OK]</b> — HTTP 201 (ساخته شد)</li>
+            <li><b>[SKIP]</b> — HTTP 409 (duplicate؛ از قبل ثبت شده)</li>
+            <li><b>[FAIL]</b> — هر چیز دیگر (یا قطع ارتباط)</li>
+          </ul>
+        </li>
+        <li><b>اعمال پرچم <code>is_active</code>:</b> لایهٔ create در App API فعلاً <code>is_active</code> را هنگام ساخت نادیده می‌گیرد و اپ همیشه فعال ساخته می‌شود. اسکریپت بعد از 201/409 با <code>POST .../deactivate/</code> یا <code>.../reactivate/</code> وضعیت نهایی را با جدول seed هم‌تراز می‌کند (مثلاً MyRightel غیرفعال می‌ماند).</li>
+        <li>اگر حداقل یک <code>[FAIL]</code> واقعی رخ دهد (نه SKIP)، با exit غیرصفر تمام می‌شود تا bring_up ادامه ندهد.</li>
+      </ol>
+
+      <p><b>لیست اپ‌های seed (۱۶ مورد — مقادیر نهایی، بدون placeholder):</b></p>
+      <table>
+        <thead>
+          <tr>
+            <th>package_name</th>
+            <th>نام نمایشی</th>
+            <th>category</th>
+            <th>is_messaging_app</th>
+            <th>is_active</th>
+            <th>is_iranian_app</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>org.telegram.messenger</code></td><td>Telegram</td><td>Messaging</td><td>false</td><td>true</td><td>false</td></tr>
+          <tr><td><code>com.whatsapp</code></td><td>WhatsApp</td><td>Messaging</td><td>false</td><td>true</td><td>false</td></tr>
+          <tr><td><code>com.instagram.android</code></td><td>Instagram</td><td>Social Network</td><td>false</td><td>true</td><td>false</td></tr>
+          <tr><td><code>com.facebook.katana</code></td><td>Facebook</td><td>Social Network</td><td>false</td><td>true</td><td>false</td></tr>
+          <tr><td><code>com.zhiliaoapp.musically</code></td><td>TikTok</td><td>Social Network</td><td>false</td><td>true</td><td>false</td></tr>
+          <tr><td><code>com.myirancell</code></td><td>Myirancell</td><td>Operator</td><td>false</td><td>true</td><td>true</td></tr>
+          <tr><td><code>ir.mci.ecareapp</code></td><td>MyMCI</td><td>Operator</td><td>false</td><td>true</td><td>true</td></tr>
+          <tr><td><code>ir.rightel.myrightel</code></td><td>MyRightel</td><td>Operator</td><td>false</td><td><b>false</b></td><td>true</td></tr>
+          <tr><td><code>com.shatelland.namava.mobile</code></td><td>Namava</td><td>Video Streaming</td><td>false</td><td>true</td><td>true</td></tr>
+          <tr><td><code>com.likotv</code></td><td>Lenz</td><td>Video Streaming</td><td>false</td><td>true</td><td>true</td></tr>
+          <tr><td><code>ir.tamashakhonehtv</code></td><td>Tamasha Khoneh</td><td>Video Streaming</td><td>false</td><td>true</td><td>true</td></tr>
+          <tr><td><code>com.plus9.fandogh</code></td><td>Fandogh</td><td>Word Game</td><td>false</td><td>true</td><td>true</td></tr>
+          <tr><td><code>com.BrainLadder.AmirzaGP</code></td><td>Amirza</td><td>Word Game</td><td>false</td><td>true</td><td>true</td></tr>
+          <tr><td><code>com.plus9.samavar</code></td><td>Samavar</td><td>Word Game</td><td>false</td><td>true</td><td>true</td></tr>
+          <tr><td><code>ir.android.baham</code></td><td>Baham</td><td>Dating Chat</td><td>true</td><td>true</td><td>true</td></tr>
+          <tr><td><code>app.pinno</code></td><td>Pinno</td><td>Dating Chat</td><td>true</td><td>true</td><td>true</td></tr>
+        </tbody>
+      </table>
+      <p align="justify">Crawler فقط اپ‌های <code>is_active=true</code> را می‌گیرد؛ بنابراین MyRightel در چرخهٔ crawl شرکت نمی‌کند، ولی در registry ثبت است. پرچم <code>is_iranian_app</code> منطقه/زبان Play Store را برای crawler تعیین می‌کند؛ <code>is_messaging_app</code> برای مسیر تحلیل شبکه معنا دارد.</p>
+
+      <hr>
+      <p><b>۴. تصمیمات معماری</b></p>
+      <ul>
+        <li><b>Seed از host با curl:</b> وابستگی به image جدا یا Django management command ندارد؛ همان API عمومی registry را تمرین می‌کند که crawler هم مصرف می‌کند.</li>
+        <li><b>Idempotent با 409:</b> روی سرور زنده و volume باقی‌مانده، دوباره آوردن استک اپ‌های قبلی را خراب نمی‌کند.</li>
+        <li><b>لیست داخل اسکریپت (نه فایل خارجی):</b> منبع حقیقت واحد و قابل‌بازبینی در git؛ مقادیر package name و پرچم‌ها نهایی‌اند و نباید با جستجوی Play Store جایگزین شوند.</li>
+        <li><b>جبران محدودیت create نسبت به <code>is_active</code>:</b> به‌جای دور زدن API، از endpointهای صریح deactivate/reactivate استفاده می‌شود تا intent کسب‌وکار روشن بماند.</li>
+        <li><b>شکست جزئی = exit غیرصفر:</b> bring_up نباید crawler را روی registry ناقص راه بیندازد.</li>
+        <li><b>جدا از پروفایل test:</b> تست‌های واحد crawler mock می‌شوند؛ seed مال استک واقعی / bring_up است.</li>
+      </ul>
+
+      <hr>
+      <p><b>۵. دستورات</b></p>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash"># معمولاً لازم نیست دستی بزنید؛ bring_up خودش صدا می‌زند.
+# پیش‌نیاز: app-api سالم و پورت روی localhost publish شده باشد.
+
+./scripts/seed_apps.sh
+
+# override آدرس / پورت
+APP_API_PORT=8000 ./scripts/seed_apps.sh
+APP_API_BASE_URL=http://localhost:8000 ./scripts/seed_apps.sh
+
+# بررسی نتیجه
+curl -sS "http://localhost:${APP_API_PORT:-8000}/api/applications/" | python3 -m json.tool
+curl -sS "http://localhost:${APP_API_PORT:-8000}/api/applications/?is_active=true" | python3 -c \
+  'import json,sys; print(len(json.load(sys.stdin)), "active apps")'
+</code></pre>
+
+    <div dir="rtl">
+      <p><b>پیش‌نیاز:</b> <code>curl</code> و <code>python3</code> روی host؛ سرویس <code>app-api</code> در حال اجرا و healthy؛ پورت <code>APP_API_PORT</code> (پیش‌فرض 8000) از host قابل دسترسی.</p>
+      <p><b>خروجی:</b> همه OK/SKIP → exit <code>0</code>؛ حداقل یک FAIL → exit <code>1</code>.</p>
+      <hr>
+      <p><a href="script-bring-up.html">← bring_up.sh</a> · <a href="scripts.html">فهرست اسکریپت‌ها</a> · <a href="application-registry.html">Application Registry →</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>Project Technical Documentation</footer>
+</body>
+</html>
