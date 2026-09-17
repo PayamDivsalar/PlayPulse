@@ -154,7 +154,7 @@
 <pre class="sourceCode bash"><code class="sourceCode bash"># ترتیب زمانی شروع: app-api باید قبل از crawler باشد
 docker inspect -f '{{.Name}} started={{.State.StartedAt}}' project_app_api project_crawler
 
-# ۱۶ اپ seed‌شده
+# ۱۵ اپ seed‌شده
 curl -sS "http://localhost:${APP_API_PORT:-8000}/api/applications/" | python3 -m json.tool
 
 # اولین چرخه نباید total=0 باشد
