@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
 
   # The ./postgres/init mount only takes effect on a completely empty
@@ -253,6 +251,10 @@ services:
     #   docker compose --profile tools build sentiment
     #   docker compose run --rm sentiment run
     #   docker compose run --rm sentiment run --batch-size 50 --dry-run
+    #
+    # Explicit image tag so a tools-profile build is reusable by
+    # sentiment-tests / sentiment-tests-integration (see profile ``test``).
+    image: playpulse-sentiment:latest
     build: ./sentiment
     container_name: project_sentiment
     profiles:
@@ -322,9 +324,36 @@ services:
       CRAWLER_CYCLE_REPORTS_ENABLED: ${CRAWLER_CYCLE_REPORTS_ENABLED:-false}
       CRAWLER_CYCLE_REPORTS_DIR: ${CRAWLER_CYCLE_REPORTS_DIR:-/data/reports}
     volumes:
+      - ./crawler/tests:/app/crawler/tests:ro
       - ./pytest.ini:/app/pytest.ini:ro
     entrypoint: ["pytest"]
     command: ["crawler/tests/", "-v", "-m", "not live"]
+    networks:
+      - project_network
+
+  # Includes Play Store hits (outbound internet) plus Kafka / App API round-
+  # trips on the compose network. CI without egress may fail the Play Store
+  # cases; the orchestrator treats those as SKIPPED, not FAIL.
+  crawler-tests-live:
+    build: ./crawler
+    profiles: ["test"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      app-api:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      APP_API_BASE_URL: http://app-api:8000
+      CRAWLER_CYCLE_REPORTS_ENABLED: ${CRAWLER_CYCLE_REPORTS_ENABLED:-false}
+      CRAWLER_CYCLE_REPORTS_DIR: ${CRAWLER_CYCLE_REPORTS_DIR:-/data/reports}
+    volumes:
+      - ./crawler/tests:/app/crawler/tests:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+    entrypoint: ["pytest"]
+    command: ["crawler/tests/", "-v", "-m", "live"]
     networks:
       - project_network
 
@@ -347,6 +376,53 @@ services:
       - ./pytest.ini:/app/pytest.ini:ro
     entrypoint: ["pytest"]
     command: ["network_analyzer/tests/", "-v", "-m", "not live and not oracle"]
+    networks:
+      - project_network
+
+  # Compose-network live checks (Kafka + App API). No outbound internet.
+  network-analyzer-tests-live:
+    build:
+      context: .
+      dockerfile: network_analyzer/Dockerfile
+    profiles: ["test"]
+    depends_on:
+      kafka:
+        condition: service_started
+      app-api:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      APP_API_BASE_URL: http://app-api:8000
+      ANALYZER_PCAP_ROOT: /data/pcap
+    volumes:
+      - ./network_analyzer/tests:/app/network_analyzer/tests:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+    entrypoint: ["pytest"]
+    command: ["network_analyzer/tests/", "-v", "-m", "live"]
+    networks:
+      - project_network
+
+  # Requires tshark (see network_analyzer/Dockerfile.test). Production image
+  # intentionally does not ship that dependency.
+  network-analyzer-tests-oracle:
+    build:
+      context: .
+      dockerfile: network_analyzer/Dockerfile.test
+    profiles: ["test"]
+    depends_on:
+      kafka:
+        condition: service_started
+      app-api:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      APP_API_BASE_URL: http://app-api:8000
+      ANALYZER_PCAP_ROOT: /data/pcap
+    volumes:
+      - ./network_analyzer/tests:/app/network_analyzer/tests:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+    entrypoint: ["pytest"]
+    command: ["network_analyzer/tests/", "-v", "-m", "oracle"]
     networks:
       - project_network
 
@@ -402,7 +478,12 @@ services:
     networks:
       - project_network
 
+  # Heavy image (torch + HF model). Prefer an already-built image; cold builds
+  # take many minutes. The orchestrator skips these if the image is absent.
+  # Same image tag as the tools-profile ``sentiment`` service so a prior
+  # ``docker compose --profile tools build sentiment`` is reusable.
   sentiment-tests:
+    image: playpulse-sentiment:latest
     build: ./sentiment
     profiles: ["test"]
     depends_on:
@@ -419,6 +500,27 @@ services:
       - ./pytest.ini:/app/pytest.ini:ro
     entrypoint: ["pytest"]
     command: ["sentiment/tests/unit", "-v"]
+    networks:
+      - project_network
+
+  sentiment-tests-integration:
+    image: playpulse-sentiment:latest
+    build: ./sentiment
+    profiles: ["test"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./sentiment/tests:/app/sentiment/tests:ro
+      - ./pytest.ini:/app/pytest.ini:ro
+    entrypoint: ["pytest"]
+    command: ["sentiment/tests/integration", "-v", "-m", "integration"]
     networks:
       - project_network
 
