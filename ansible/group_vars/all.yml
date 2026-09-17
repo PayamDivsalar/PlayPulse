@@ -1,0 +1,27 @@
+---
+# =============================================================================
+# Non-sensitive variables. Safe to commit.
+#
+# Secrets (Postgres user/password/db) are NOT here — they live in the
+# ansible-vault-encrypted group_vars/vault.yml (see vault.yml.example).
+# =============================================================================
+
+# --- Repository / deploy target ---------------------------------------------
+# Where to clone from and which ref to deploy. project_dir is where the repo
+# is checked out on the server and where bring_up.sh / check_infra.sh run.
+project_repo_url: "https://github.com/PayamDivsalar/PlayPulse.git"
+project_version: "main"          # branch, tag, or commit to deploy
+project_dir: "/opt/playpulse"
+
+# --- Non-sensitive published ports (mirror of the root .env.example) --------
+# These are the same in every environment, so they are not secrets.
+postgres_port: 5432
+app_api_port: 8000
+kafka_external_port: 9092
+kafka_ui_port: 8080
+metabase_port: 3000
+
+# --- Optional crawl+persist cycle reports -----------------------------------
+# Off by default, same as scripts/bring_up.sh without --with-cycle-reports.
+crawler_cycle_reports_enabled: false
+crawler_cycle_reports_dir: "/data/reports"

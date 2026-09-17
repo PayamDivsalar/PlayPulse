@@ -1,0 +1,80 @@
+---
+# =============================================================================
+# docker role: install Docker Engine + Compose plugin on Ubuntu.
+#
+# Fully idempotent: uses the official apt / apt_key / apt_repository modules,
+# so a second run installs nothing and reports only "ok" (no changes, no
+# errors). No manual shell/curl piping.
+# =============================================================================
+
+- name: Install prerequisites for the Docker apt repository
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  tags: [docker]
+
+- name: Ensure the apt keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+  tags: [docker]
+
+# apt_key + apt_repository below are the official, idempotent modules for this.
+# Note: both are deprecated in favour of `deb822_repository` and slated for
+# removal in ansible-core 2.25; they work fine on current ansible-core. Swap to
+# deb822_repository if/when you upgrade past 2.24.
+- name: Add Docker's official APT signing key
+  ansible.builtin.apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    keyring: /etc/apt/keyrings/docker.gpg
+    state: present
+  tags: [docker]
+
+- name: Determine the dpkg architecture (amd64/arm64/...)
+  ansible.builtin.command: dpkg --print-architecture
+  register: docker_dpkg_arch
+  changed_when: false
+  check_mode: false
+  tags: [docker]
+
+- name: Add the Docker APT repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch={{ docker_dpkg_arch.stdout }} signed-by=/etc/apt/keyrings/docker.gpg]
+      https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+    filename: docker
+    state: present
+    update_cache: true
+  tags: [docker]
+
+- name: Install Docker Engine, CLI, containerd and the Compose plugin
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+  tags: [docker]
+
+- name: Ensure the Docker service is enabled and running
+  ansible.builtin.service:
+    name: docker
+    state: started
+    enabled: true
+  tags: [docker]
+
+- name: Add the login user to the docker group (run docker without sudo)
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+  tags: [docker]

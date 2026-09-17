@@ -1,0 +1,45 @@
+---
+# =============================================================================
+# deploy role: hand off to the project's own scripts. No compose logic is
+# reimplemented here.
+#
+#   1. scripts/bring_up.sh --skip-check   -> prepare env, start the Compose
+#                                            stack, wait for services to be
+#                                            usable. --skip-check is passed so
+#                                            the smoke test runs as its own,
+#                                            clearly-reported step below.
+#   2. scripts/infra/check_infra.sh       -> confirm Postgres/Kafka/Metabase
+#                                            health; non-zero exit fails the play.
+#
+# These run shell scripts, so Ansible always marks them "changed"; the
+# underlying `docker compose up -d` is itself idempotent. Idempotency of the
+# playbook as a whole is visible in the docker/project_setup roles reporting
+# no changes on a second run, and check_infra.sh passing every time.
+# =============================================================================
+
+- name: Bring up the stack (scripts/bring_up.sh)
+  ansible.builtin.command:
+    cmd: ./scripts/bring_up.sh --skip-check
+    chdir: "{{ project_dir }}"
+  register: bring_up_result
+  changed_when: true
+  tags: [deploy]
+
+- name: Show bring_up.sh output
+  ansible.builtin.debug:
+    var: bring_up_result.stdout_lines
+  tags: [deploy]
+
+- name: Confirm infrastructure health (scripts/infra/check_infra.sh)
+  ansible.builtin.command:
+    cmd: ./scripts/infra/check_infra.sh
+    chdir: "{{ project_dir }}"
+  register: check_infra_result
+  changed_when: false
+  failed_when: check_infra_result.rc != 0
+  tags: [deploy]
+
+- name: Show check_infra.sh output
+  ansible.builtin.debug:
+    var: check_infra_result.stdout_lines
+  tags: [deploy]

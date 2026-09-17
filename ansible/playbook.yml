@@ -1,0 +1,33 @@
+---
+# =============================================================================
+# PlayPulse production deployment playbook.
+#
+# Ansible is a thin layer on top of the project's own tooling: it installs
+# Docker, fetches the repo, renders .env, and then hands off to the existing
+# scripts (scripts/bring_up.sh + scripts/infra/check_infra.sh). It does NOT
+# reimplement compose/bring-up logic.
+#
+# Full run (installs Docker, clones repo, renders .env, deploys, health-checks):
+#   ansible-playbook -i inventory.ini playbook.yml --ask-vault-pass
+#
+# Only update code + redeploy (skip the Docker install):
+#   ansible-playbook -i inventory.ini playbook.yml --tags deploy --ask-vault-pass
+#
+# Only (re)install Docker Engine + Compose plugin:
+#   ansible-playbook -i inventory.ini playbook.yml --tags docker --ask-vault-pass
+# =============================================================================
+- name: Deploy PlayPulse to a production Ubuntu server
+  hosts: production
+  become: true
+  gather_facts: true
+
+  # Non-sensitive vars come from group_vars/all.yml (auto-loaded for the `all`
+  # group). The encrypted secrets live in group_vars/vault.yml, which is NOT a
+  # real group name, so it is loaded explicitly here.
+  vars_files:
+    - "{{ playbook_dir }}/group_vars/vault.yml"
+
+  roles:
+    - role: docker
+    - role: project_setup
+    - role: deploy

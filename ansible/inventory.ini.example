@@ -1,0 +1,20 @@
+# Example inventory. Copy to inventory.ini and put the REAL server IP/host in.
+#
+#   cp inventory.ini.example inventory.ini
+#   # then edit inventory.ini and replace the placeholder ansible_host
+#
+# inventory.ini (the real one) is gitignored and must never be committed.
+#
+# The 203.0.113.0/24 range below is reserved for documentation (RFC 5737),
+# i.e. it is deliberately NOT a real address — swap it for your server's IP.
+
+[production]
+prod-server ansible_host=203.0.113.10
+
+[production:vars]
+# SSH login user on the target server (must be able to sudo).
+ansible_user=ubuntu
+# Path to the private key that authenticates that user (optional if you use
+# an ssh-agent or password auth).
+# ansible_ssh_private_key_file=~/.ssh/id_ed25519
+ansible_python_interpreter=/usr/bin/python3
