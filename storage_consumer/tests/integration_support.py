@@ -105,8 +105,8 @@ def register_application(cursor, package_name: str) -> int:
     cursor.execute(
         """
         INSERT INTO apps_registry_application
-            (package_name, is_messaging_app, is_active, created_at, updated_at)
-        VALUES (%s, TRUE, TRUE, now(), now())
+            (package_name, is_messaging_app, is_active, is_iranian_app, created_at, updated_at)
+        VALUES (%s, TRUE, TRUE, FALSE, now(), now())
         ON CONFLICT (package_name) DO UPDATE SET updated_at = now()
         RETURNING id
         """,

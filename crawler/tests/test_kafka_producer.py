@@ -6,6 +6,7 @@ import json
 import time
 import unittest
 import uuid
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -266,15 +267,27 @@ class CrawlerKafkaProducerTests(unittest.TestCase):
 class CrawlerKafkaProducerLiveTests(unittest.TestCase):
     """Live Kafka tests. Require a running broker; do not run in automated CI."""
 
-    def _host_bootstrap(self) -> str:
+    def _bootstrap(self) -> str:
+        """Resolve the broker address for the current execution environment.
+        Host/venv expects ``localhost:9092``. Inside the compose network the
+        correct listener is ``kafka:29092`` (set by the ``crawler-tests-live``
+        service). Fail fast when the wrong one is used for the environment.
+        """
+
         bootstrap = load_settings().kafka_bootstrap_servers
-        # Crawler/pytest run on the host; docker-internal DNS (kafka:29092) only
-        # works inside the compose network. Fail fast with a clear hint.
-        if "kafka:" in bootstrap.split(",")[0]:
+        first = bootstrap.split(",")[0].strip()
+        in_docker = Path("/.dockerenv").exists()
+        if "kafka:" in first and not in_docker:
             self.fail(
                 "KAFKA_BOOTSTRAP_SERVERS is set to a docker-internal address "
                 f"({bootstrap!r}). From the host use localhost:9092 "
                 "(see crawler/.env.example and docs/setup.md)."
+            )
+        if first.startswith("localhost:") and in_docker:
+            self.fail(
+                "KAFKA_BOOTSTRAP_SERVERS is set to a host address "
+                f"({bootstrap!r}). Inside Docker use kafka:29092 "
+                "(compose sets this for crawler-tests-live)."
             )
         return bootstrap
 
@@ -286,7 +299,7 @@ class CrawlerKafkaProducerLiveTests(unittest.TestCase):
         with real crawled apps.
         """
 
-        bootstrap = self._host_bootstrap()
+        bootstrap = self._bootstrap()
         settings = load_settings()
 
         package_name = f"live-test-app-{uuid.uuid4().hex[:12]}"
@@ -358,7 +371,7 @@ class CrawlerKafkaProducerLiveTests(unittest.TestCase):
     def test_live_send_app_stats_acks_all_is_not_unreasonably_slow(self) -> None:
         """Sanity check: acks=all should not add multi-second latency locally."""
 
-        bootstrap = self._host_bootstrap()
+        bootstrap = self._bootstrap()
         settings = load_settings()
         package_name = f"live-test-latency-{uuid.uuid4().hex[:12]}"
         payload = {"score": 4.2, "version": "live-latency-1.0.0"}
