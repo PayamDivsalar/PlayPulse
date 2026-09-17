@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>finalize_cycle_reports.py | مستندات اسکریپت‌ها</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">مستندات فنی پروژه</a>
+    <nav>
+      <a href="index.html">خانه</a>
+      <a href="application-registry.html">Application Registry</a>
+      <a href="database-schema.html">Database Schema</a>
+      <a href="infra-setup.html">Infrastructure</a>
+      <a href="crawler.html">Crawler</a>
+      <a href="storage-consumer.html">Storage Consumer</a>
+      <a href="sentiment.html">Sentiment</a>
+      <a class="active" href="scripts.html">Scripts</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">
+    <span class="eyebrow">SCRIPTS · CYCLE REPORTS</span>
+    <h1>reports/finalize_cycle_reports.py — نهایی‌سازی گزارش چرخه</h1>
+  </div>
+
+  <article class="doc-content">
+    <div dir="rtl">
+      <p><a href="scripts.html">← بازگشت به فهرست اسکریپت‌ها</a></p>
+      <hr>
+
+      <p><b>مسیر فایل:</b> <code>scripts/reports/finalize_cycle_reports.py</code></p>
+
+      <hr>
+      <p><b>۱. کاراییش به زبان ساده</b></p>
+      <p align="justify">وقتی گزارش‌های چرخه فعال باشند، Crawler پس از هر دور crawl یک فایل JSON در <code>data/reports/pending/</code> می‌نویسد. این اسکریپت آن فایل‌ها را برنمی‌دارد تا وقتی lag کافکای Storage Consumer روی تاپیک‌های <code>app-stats</code> و <code>reviews</code> به <b>صفر</b> برسد؛ بعد یک خط به <code>data/reports/cycles.jsonl</code> اضافه می‌کند، verdict می‌زند، و فایل را به <code>done/</code> منتقل می‌کند. معمولاً دستی اجرا نمی‌شود — سرویس Compose به نام <code>cycle-reporter</code> همین فایل را mount و در حلقه اجرا می‌کند.</p>
+
+      <hr>
+      <p><b>۲. کجا در پروژه کلی استفاده می‌شود؟</b></p>
+      <ul>
+        <li>فعال‌سازی از طریق <code>./scripts/bring_up.sh --with-cycle-reports</code> (کامنت‌های <code>docker-compose.yml</code> هم همین را می‌گویند).</li>
+        <li>سرویس <code>cycle-reporter</code> با entrypoint مستقیم روی همین اسکریپت پایتون.</li>
+        <li>پل بین «خلاصهٔ crawl سمت producer» و «اطمینان از اینکه consumer backlog را خالی کرده» — یعنی گزارش end-to-end واقعی، نه فقط لاگ کراولر.</li>
+        <li>روی host هم قابل اجراست وقتی استک بالاست و Kafka از <code>localhost:9092</code> در دسترس است.</li>
+      </ul>
+
+      <hr>
+      <p><b>۳. چیکارا می‌کند؟</b></p>
+      <ol>
+        <li>پوشه‌های <code>pending</code> / <code>done</code> را در مسیر گزارش‌ها آماده می‌کند.</li>
+        <li>برای هر <code>*.json</code> در pending:
+          <ul>
+            <li>منتظر lag=0 روی گروه‌های <code>storage-consumer.app-stats</code> و <code>storage-consumer.reviews</code> (با timeout قابل تنظیم، پیش‌فرض ۶۰۰ ثانیه).</li>
+            <li>اختیاری: شمارش dead letterهایی که از شروع چرخه به بعد ثبت شده‌اند (اگر Postgres در دسترس باشد).</li>
+            <li>ساخت گزارش نهایی با فیلدهای lag، مدت end-to-end، و <b>verdict</b>.</li>
+            <li>Append یک خط JSON به <code>cycles.jsonl</code> و انتقال فایل به <code>done/</code>.</li>
+          </ul>
+        </li>
+        <li>حالت <code>--loop</code>: همین کار را در بازهٔ زمانی تکرار می‌کند (پیش‌فرض ۶۰ ثانیه / env).</li>
+      </ol>
+
+      <p><b>معنای verdictها (خلاصه):</b></p>
+      <table>
+        <thead><tr><th>verdict</th><th>شرایط تقریبی</th></tr></thead>
+        <tbody>
+          <tr><td><code>ok</code></td><td>lag صفر، بدون dead letter جدید، و crawl برای stats/reviews کامل موفق.</td></tr>
+          <tr><td><code>partial</code></td><td>بخشی از crawl شکست خورده، یا dead letter بعد از شروع چرخه وجود دارد.</td></tr>
+          <tr><td><code>failed</code></td><td>هیچ stats و هیچ reviews موفقی در چرخه نبوده.</td></tr>
+          <tr><td><code>persist_lagging</code></td><td>تا پایان timeout هنوز lag صفر نشده.</td></tr>
+        </tbody>
+      </table>
+
+      <hr>
+      <p><b>۴. تصمیمات معماری</b></p>
+      <ul>
+        <li><b>چرا pending فقط بعد از پایان crawl ساخته می‌شود؟</b> تا mid-cycle lag=0 باعث finalize زودهنگام نشود — در میانهٔ چرخه ممکن است موقتاً صف خالی به نظر برسد در حالی که producer هنوز پیام می‌فرستد.</li>
+        <li><b>دو منبع حقیقت جدا:</b> Crawler آمار تولید خودش را می‌نویسد؛ این اسکریپت بُعد persist را اضافه می‌کند. گزارش نهایی بدون ادغام این دو ناقص است.</li>
+        <li><b>jsonl به‌جای DB جدا:</b> سبک، append-only، مناسب tail کردن توسط اپراتور و ابزارهای ساده؛ نیاز به اسکیمای گزارش جدا ندارد.</li>
+        <li><b>مسیر گزارش وابسته به محیط:</b> روی host معمولاً <code>data/reports</code>؛ داخل کانتینر وقتی <code>POSTGRES_HOST=postgres</code> باشد مسیر <code>/data/reports</code>؛ قابل override با env.</li>
+        <li><b>سرویس Compose جدا (<code>cycle-reporter</code>):</b> منطق finalize داخل imageهای crawler/consumer قاطی نشود؛ یک job ops با mount فقط همین اسکریپت.</li>
+      </ul>
+
+      <hr>
+      <p><b>۵. دستورات</b></p>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash"># فعال‌سازی از طریق bring-up
+./scripts/bring_up.sh --with-cycle-reports
+docker compose logs -f cycle-reporter
+tail -n 20 data/reports/cycles.jsonl
+
+# اجرای یک‌باره روی host (استک بالا، Kafka روی localhost:9092)
+./scripts/reports/finalize_cycle_reports.py
+
+# حلقهٔ دستی
+./scripts/reports/finalize_cycle_reports.py --loop --interval 60
+
+# تنظیم timeout انتظار برای lag
+./scripts/reports/finalize_cycle_reports.py --lag-timeout 300
+</code></pre>
+
+    <div dir="rtl">
+      <p><b>پیش‌نیاز host:</b> بستهٔ <code>kafka-python</code> (و برای dead-letter count، <code>psycopg2</code>). استک باید بالا باشد.</p>
+      <hr>
+      <p><a href="script-analyze-pcaps.html">← analyze_pcaps.sh</a> · <a href="scripts.html">فهرست اسکریپت‌ها</a> · <a href="script-run-tests-in-docker.html">run_tests_in_docker.sh →</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>Project Technical Documentation</footer>
+</body>
+</html>

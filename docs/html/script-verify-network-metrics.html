@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>verify_network_metrics.sh | مستندات اسکریپت‌ها</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">مستندات فنی پروژه</a>
+    <nav>
+      <a href="index.html">خانه</a>
+      <a href="application-registry.html">Application Registry</a>
+      <a href="database-schema.html">Database Schema</a>
+      <a href="infra-setup.html">Infrastructure</a>
+      <a href="crawler.html">Crawler</a>
+      <a href="storage-consumer.html">Storage Consumer</a>
+      <a href="sentiment.html">Sentiment</a>
+      <a class="active" href="scripts.html">Scripts</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">
+    <span class="eyebrow">SCRIPTS · VERIFY NETWORK TOPIC</span>
+    <h1>verify/verify_network_metrics.sh — تأیید انتشار متریک شبکه</h1>
+  </div>
+
+  <article class="doc-content">
+    <div dir="rtl">
+      <p><a href="scripts.html">← بازگشت به فهرست اسکریپت‌ها</a></p>
+      <hr>
+
+      <p><b>مسیر فایل:</b> <code>scripts/verify/verify_network_metrics.sh</code></p>
+
+      <hr>
+      <p><b>۱. کاراییش به زبان ساده</b></p>
+      <p align="justify">پیام‌های تاپیک Kafka به نام <code>network-metrics</code> را می‌خواند تا اپراتور ببیند Network Analyzer واقعاً چیزی publish کرده یا نه. می‌تواند payload را چاپ کند، فقط تعداد پیام‌ها را بگوید، یا فقط پیام‌های جدید از این لحظه به بعد را نشان دهد.</p>
+
+      <hr>
+      <p><b>۲. کجا در پروژه کلی استفاده می‌شود؟</b></p>
+      <ul>
+        <li>بلافاصله بعد از <code>analyze_pcaps.sh</code> یا اجرای batch سرویس Compose <code>network-analyzer</code>.</li>
+        <li>قبل از عمیق شدن در مشکل «چرا در DB چیزی نیست»: اول باید ثابت شود پیام روی تاپیک هست.</li>
+        <li>مکمل <code>verify_storage_consumer.sh</code>: یکی سمت publish، یکی سمت persist.</li>
+        <li>تاریخی: وقتی هنوز لایهٔ storage کامل نبود، تاپیک تنها شواهد موجود بود؛ امروز هم برای جدا کردن «تولیدکننده خراب است» از «مصرف‌کننده خراب است» ضروری است.</li>
+      </ul>
+
+      <hr>
+      <p><b>۳. چیکارا می‌کند؟</b></p>
+      <ol>
+        <li>کانتینر Kafka را چک می‌کند.</li>
+        <li>با ابزار CLI داخل کانتینر، از تاپیک (پیش‌فرض <code>network-metrics</code>) می‌خواند.</li>
+        <li>حالت‌ها:
+          <ul>
+            <li>پیش‌فرض: از ابتدای تاپیک تا حداکثر N پیام (پیش‌فرض ۱۰)، با timeout.</li>
+            <li><code>--count-only</code>: فقط شمارش، بدون dump محتوا.</li>
+            <li><code>--latest</code>: فقط پیام‌هایی که از الان به بعد می‌آیند (مناسب تأیید زنده بودن publish).</li>
+          </ul>
+        </li>
+      </ol>
+
+      <hr>
+      <p><b>۴. تصمیمات معماری</b></p>
+      <ul>
+        <li><b>خواندن از داخل کانتینر Kafka:</b> نیاز به نصب client روی host نیست؛ همان محیطی که بروکر دارد.</li>
+        <li><b>جدا بودن از DB verify:</b> اگر pipeline دو طرف داشته باشد و فقط یکی را چک کنید، تشخیص ریشهٔ خطا مبهم می‌شود.</li>
+        <li><b><code>--count-only</code> برای CI/عملیات سریع:</b> dump کامل JSON روی ترمینال شلوغ و گاهی حاوی دادهٔ حجیم است.</li>
+        <li><b><code>--latest</code> برای تأیید لحظه‌ای:</b> replay از beginning روی تاپیک قدیمی ممکن است پیام‌های کهنه را «موفقیت کاذب» نشان دهد.</li>
+        <li><b>تاپیک قابل override:</b> پیش‌فرض درست پروژه است، ولی برای دیباگ محیط‌های آزمایشی انعطاف می‌ماند.</li>
+      </ul>
+
+      <hr>
+      <p><b>۵. دستورات</b></p>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash"># خواندن چند پیام از ابتدای تاپیک
+./scripts/verify/verify_network_metrics.sh
+
+# فقط تعداد پیام‌ها
+./scripts/verify/verify_network_metrics.sh --count-only
+
+# منتظر یک پیام جدید بمان
+./scripts/verify/verify_network_metrics.sh --latest --max-messages 1 --timeout 60
+
+./scripts/verify/verify_network_metrics.sh --help
+</code></pre>
+
+    <div dir="rtl">
+      <p><b>پیش‌نیاز:</b> Kafka در حال اجرا. معمولاً بعد از:</p>
+    </div>
+<pre class="sourceCode bash"><code class="sourceCode bash">./scripts/network/analyze_pcaps.sh
+# یا:
+# docker compose --profile tools run --rm network-analyzer
+</code></pre>
+
+    <div dir="rtl">
+      <hr>
+      <p><a href="script-verify-storage-consumer.html">← verify_storage_consumer.sh</a> · <a href="scripts.html">فهرست اسکریپت‌ها</a> · <a href="script-analyze-pcaps.html">analyze_pcaps.sh →</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>Project Technical Documentation</footer>
+</body>
+</html>

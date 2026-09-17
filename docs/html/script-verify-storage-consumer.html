@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>verify_storage_consumer.sh | مستندات اسکریپت‌ها</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">مستندات فنی پروژه</a>
+    <nav>
+      <a href="index.html">خانه</a>
+      <a href="application-registry.html">Application Registry</a>
+      <a href="database-schema.html">Database Schema</a>
+      <a href="infra-setup.html">Infrastructure</a>
+      <a href="crawler.html">Crawler</a>
+      <a href="storage-consumer.html">Storage Consumer</a>
+      <a href="sentiment.html">Sentiment</a>
+      <a class="active" href="scripts.html">Scripts</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">
+    <span class="eyebrow">SCRIPTS · VERIFY PERSISTENCE</span>
+    <h1>verify/verify_storage_consumer.sh — تأیید ماندگارسازی</h1>
+  </div>
+
+  <article class="doc-content">
+    <div dir="rtl">
+      <p><a href="scripts.html">← بازگشت به فهرست اسکریپت‌ها</a></p>
+      <hr>
+
+      <p><b>مسیر فایل:</b> <code>scripts/verify/verify_storage_consumer.sh</code></p>
+
+      <hr>
+      <p><b>۱. کاراییش به زبان ساده</b></p>
+      <p align="justify">بعد از یک دور crawl یا بعد از deploy کردن Storage Consumer، این سوال را جواب می‌دهد: «آیا چیزهایی که به Kafka رفته‌اند واقعاً در PostgreSQL نشسته‌اند؟» مکمل <code>verify_network_metrics.sh</code> است: آن یکی ثابت می‌کند Analyzer چیزی <b>منتشر</b> کرده؛ این یکی ثابت می‌کند ردیف‌ها <b>ماندگار</b> شده‌اند.</p>
+
+      <hr>
+      <p><b>۲. کجا در پروژه کلی استفاده می‌شود؟</b></p>
+      <ul>
+        <li>پس از چرخهٔ Crawler، وقتی لاگ می‌گوید پیام publish شده ولی DB خالی به نظر می‌رسد.</li>
+        <li>پس از deploy / restart سرویس <code>storage-consumer</code>.</li>
+        <li>در جریان عملیاتی توصیه‌شده در <code>scripts/README.md</code> کنار <code>bring_up</code> و <code>check_infra</code>.</li>
+        <li>هم‌راستا با مستند معماری <a href="storage-consumer.html">Storage Consumer</a>: این اسکریپت لایهٔ ops برای همان تضمین‌های persistence است.</li>
+      </ul>
+
+      <hr>
+      <p><b>۳. چیکارا می‌کند؟ (به ترتیب)</b></p>
+      <ol>
+        <li><b>اسکیما:</b> آیا اشیاء اسکیمایی که این زیرسیستم مالک آن‌هاست در Postgres حاضرند؟</li>
+        <li><b>سلامت کانتینر:</b> آیا <code>project_storage_consumer</code> در حال اجرا و healthy است؟</li>
+        <li><b>Lag کافکا:</b> آیا consumer groupها (<code>storage-consumer.*</code>) عقب افتاده‌اند یا در حال همگام‌ماندن‌اند؟ آستانهٔ هشدار پیش‌فرض ۱۰۰۰ است.</li>
+        <li><b>ردیف‌های ذخیره‌شده:</b> شمارش / حضور داده در جدول‌های مقصد.</li>
+        <li><b>Dead letters:</b> چند پیام اخیر رد شده‌اند و (اختیاری) نمایش جزئیات آن‌ها.</li>
+      </ol>
+      <p>Exit code <code>0</code> یعنی اسکیما هست، consumer سالم است و ردیف‌ها حاضرند؛ <code>1</code> یعنی حداقل یک چک الزامی شکست خورده.</p>
+
+      <hr>
+      <p><b>۴. تصمیمات معماری</b></p>
+      <ul>
+        <li><b>جدا از check_infra:</b> infra سالم بودن ≠ دادهٔ business درست نشستن. این اسکریپت عمداً لایهٔ بالاتر را چک می‌کند.</li>
+        <li><b>Lag به‌عنوان سیگنال عملیاتی:</b> قبل از نتیجه‌گیری «DB خالی است چون consumer خراب است»، باید دید آیا هنوز در حال خوردن backlog است.</li>
+        <li><b>Dead letters قابل مشاهده:</b> پیام‌های reject‌شده نباید فقط در لاگ گم شوند؛ جدول dead letter منبع حقیقت برای «چرا ننشست» است.</li>
+        <li><b>پیشوند group قابل تنظیم:</b> باید با <code>STORAGE_CONSUMER_GROUP_PREFIX</code> واقعی محیط یکی باشد؛ در غیر این صورت lag مربوط به گروه اشتباه خوانده می‌شود.</li>
+        <li><b>WARN در برابر FAIL:</b> عبور lag از آستانه می‌تواند هشدار باشد بدون اینکه لزوماً کل verify را قرمز کند — تا نویز و سیگنال از هم جدا بمانند.</li>
+      </ul>
+
+      <hr>
+      <p><b>۵. دستورات</b></p>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash"># بررسی معمول پس از بالا آمدن استک / بعد از crawl
+./scripts/verify/verify_storage_consumer.sh
+
+# بررسی عمیق‌تر پیام‌های ردشده
+./scripts/verify/verify_storage_consumer.sh --dead-letters 25
+
+# تغییر آستانهٔ هشدار lag
+./scripts/verify/verify_storage_consumer.sh --lag-threshold 500
+
+./scripts/verify/verify_storage_consumer.sh --help
+</code></pre>
+
+    <div dir="rtl">
+      <p><b>پیش‌نیاز:</b></p>
+    </div>
+<pre class="sourceCode bash"><code class="sourceCode bash">docker compose up -d postgres kafka storage-consumer
+</code></pre>
+
+    <div dir="rtl">
+      <hr>
+      <p><a href="script-create-topics.html">← create_topics.sh</a> · <a href="scripts.html">فهرست اسکریپت‌ها</a> · <a href="script-verify-network-metrics.html">verify_network_metrics.sh →</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>Project Technical Documentation</footer>
+</body>
+</html>

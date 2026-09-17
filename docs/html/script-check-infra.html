@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>check_infra.sh | مستندات اسکریپت‌ها</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">مستندات فنی پروژه</a>
+    <nav>
+      <a href="index.html">خانه</a>
+      <a href="application-registry.html">Application Registry</a>
+      <a href="database-schema.html">Database Schema</a>
+      <a href="infra-setup.html">Infrastructure</a>
+      <a href="crawler.html">Crawler</a>
+      <a href="storage-consumer.html">Storage Consumer</a>
+      <a href="sentiment.html">Sentiment</a>
+      <a class="active" href="scripts.html">Scripts</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">
+    <span class="eyebrow">SCRIPTS · INFRA SMOKE</span>
+    <h1>infra/check_infra.sh — Smoke Test زیرساخت</h1>
+  </div>
+
+  <article class="doc-content">
+    <div dir="rtl">
+      <p><a href="scripts.html">← بازگشت به فهرست اسکریپت‌ها</a></p>
+      <hr>
+
+      <p><b>مسیر فایل:</b> <code>scripts/infra/check_infra.sh</code></p>
+      <p>مستند سطح بالاتر زیرساخت نیز در <a href="infra-setup.html">Infrastructure Setup</a> آمده است؛ این صفحه روی خودِ اسکریپت تمرکز دارد.</p>
+
+      <hr>
+      <p><b>۱. کاراییش به زبان ساده</b></p>
+      <p align="justify">این اسکریپت فقط می‌پرسد: «Postgres، Kafka و Metabase واقعاً زنده‌اند و می‌شود به آن‌ها وصل شد و write/read کرد؟» هیچ فرضی دربارهٔ صحت دادهٔ اپلیکیشن (ردیف‌های crawl، reviews و …) ندارد. اگر مشکلی در استک باشد، قبل از متهم کردن Crawler یا Storage Consumer، همین‌جا مشخص می‌شود.</p>
+
+      <hr>
+      <p><b>۲. کجا در پروژه کلی استفاده می‌شود؟</b></p>
+      <ul>
+        <li>به‌صورت خودکار در انتهای <code>bring_up.sh</code> (مگر <code>--skip-check</code>).</li>
+        <li>دستی پس از restart زیرساخت، یا وقتی مشکوکید مشکل از infra است نه از منطق اپ.</li>
+        <li>پیش‌شرط قابل اتکا برای اسکریپت‌ها/جریان‌های بعدی که به exit code معنادار نیاز دارند.</li>
+        <li>مرجع مفهومی همان Smoke Testای است که در <code>docs/html/infra-setup.html</code> شرح داده شده.</li>
+      </ul>
+
+      <hr>
+      <p><b>۳. چیکارا می‌کند؟</b></p>
+      <p><b>PostgreSQL</b></p>
+      <table>
+        <thead><tr><th>مرحله</th><th>هدف</th></tr></thead>
+        <tbody>
+          <tr><td>اجرا بودن کانتینر</td><td>کانتینر <code>project_postgres</code> crash یا stop نباشد.</td></tr>
+          <tr><td><code>pg_isready</code></td><td>فاصلهٔ بین «بالا آمدن کانتینر» و «آماده بودن دیتابیس» پوشش داده شود.</td></tr>
+          <tr><td>نوشتن و خواندن واقعی</td><td>جدول موقت، insert، select، drop — فراتر از ping ساده؛ کاربر و DB تعریف‌شده در <code>.env</code> واقعاً کار می‌کنند.</td></tr>
+        </tbody>
+      </table>
+
+      <p><b>Kafka</b></p>
+      <table>
+        <thead><tr><th>مرحله</th><th>هدف</th></tr></thead>
+        <tbody>
+          <tr><td>اجرا بودن کانتینر</td><td>کانتینر <code>project_kafka</code> بالا باشد.</td></tr>
+          <tr><td>در دسترس بودن بروکر</td><td>API بروکر پاسخ دهد (اتصال به ZooKeeper و آمادگی کامل).</td></tr>
+          <tr><td>ساخت Topic تستی</td><td>عملیات مدیریتی Topic بدون خطا انجام شود.</td></tr>
+          <tr><td>Produce / Consume و تطبیق محتوا</td><td>شبیه‌سازی مسیر Crawler → Consumer؛ پیام دریافتی دقیقاً همان ارسالی باشد.</td></tr>
+          <tr><td>پاکسازی Topic تستی</td><td>دادهٔ تستی روی بروکر باقی نماند.</td></tr>
+        </tbody>
+      </table>
+
+      <p><b>Metabase</b></p>
+      <p align="justify">اجرا بودن کانتینر Metabase نیز بررسی می‌شود تا داشبورد ops بخشی از «زیرساخت قابل استفاده» باشد، نه صرفاً یک سرویس جانبی فراموش‌شده.</p>
+
+      <p><b>وضعیت‌های خروجی هر مرحله:</b></p>
+      <ul>
+        <li><b>[OK]</b> — موفق</li>
+        <li><b>[FAIL]</b> — ناموفق (+ جزئیات)</li>
+        <li><b>[..]</b> — در حال انجام</li>
+      </ul>
+      <p>در پایان: همه موفق → exit code <code>0</code>؛ حداقل یک شکست → exit code <code>1</code> با شمارش خطاها.</p>
+
+      <hr>
+      <p><b>۴. تصمیمات معماری</b></p>
+      <ul>
+        <li><b>مقاوم در برابر خطای جزئی:</b> با اولین FAIL متوقف نمی‌شود؛ همهٔ چک‌ها تا آخر می‌روند تا گزارش کامل بماند.</li>
+        <li><b>Retry:</b> بین بالا آمدن کانتینر و آمادگی سرویس چند ثانیه فاصله طبیعی است؛ بدون retry نویز کاذب زیاد می‌شود.</li>
+        <li><b>عدم وابستگی به کد پایتون پروژه:</b> فقط ابزار داخل imageها (<code>psql</code>، CLI کافکا). قبل از نوشته شدن هر خط اپ هم قابل اجراست.</li>
+        <li><b>پاکسازی خودکار:</b> جدول موقت و Topic تستی حذف می‌شوند تا infra پس از تست تمیز بماند.</li>
+        <li><b>جدا از کیفیت داده:</b> عمداً به ردیف‌های business نگاه نمی‌کند؛ آن کار مال <code>verify_storage_consumer.sh</code> و مشابهات است.</li>
+      </ul>
+
+      <hr>
+      <p><b>۵. دستورات</b></p>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash"># پیش‌نیاز: .env ریشه + سرویس‌های infra بالا
+cp .env.example .env   # در صورت نیاز
+docker compose up -d postgres zookeeper kafka
+
+./scripts/infra/check_infra.sh
+</code></pre>
+
+    <div dir="rtl">
+      <p><b>پیش‌نیاز:</b> فایل <code>.env</code> در ریشه؛ کانتینرهای <code>postgres</code>، <code>zookeeper</code>، <code>kafka</code> (و در صورت بررسی Metabase، کانتینر مربوطه) در حال اجرا.</p>
+      <hr>
+      <p><a href="script-bring-up.html">← bring_up.sh</a> · <a href="scripts.html">فهرست اسکریپت‌ها</a> · <a href="script-create-topics.html">create_topics.sh →</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>Project Technical Documentation</footer>
+</body>
+</html>

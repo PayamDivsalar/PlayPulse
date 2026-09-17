@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>create_topics.sh | مستندات اسکریپت‌ها</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">مستندات فنی پروژه</a>
+    <nav>
+      <a href="index.html">خانه</a>
+      <a href="application-registry.html">Application Registry</a>
+      <a href="database-schema.html">Database Schema</a>
+      <a href="infra-setup.html">Infrastructure</a>
+      <a href="crawler.html">Crawler</a>
+      <a href="storage-consumer.html">Storage Consumer</a>
+      <a href="sentiment.html">Sentiment</a>
+      <a class="active" href="scripts.html">Scripts</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">
+    <span class="eyebrow">SCRIPTS · KAFKA TOPICS</span>
+    <h1>infra/create_topics.sh — ساخت و عریض‌کردن تاپیک‌ها</h1>
+  </div>
+
+  <article class="doc-content">
+    <div dir="rtl">
+      <p><a href="scripts.html">← بازگشت به فهرست اسکریپت‌ها</a></p>
+      <hr>
+
+      <p><b>مسیر فایل:</b> <code>scripts/infra/create_topics.sh</code></p>
+
+      <hr>
+      <p><b>۱. کاراییش به زبان ساده</b></p>
+      <p align="justify">سه تاپیک اصلی PlayPulse را با تعداد پارتیشن انتخابی (پیش‌فرض <b>۳</b>) می‌سازد و گزارش می‌دهد کدام‌ها باریک‌تر از هدف هستند. اگر تاپیک از قبل وجود داشته باشد و بخواهید پارتیشن‌ها را زیاد کنید، باید صریحاً <code>--alter</code> بزنید — چون عریض‌کردن partitioning یک تاپیک زنده تصمیم حساسی است.</p>
+
+      <hr>
+      <p><b>۲. کجا در پروژه کلی استفاده می‌شود؟</b></p>
+      <ul>
+        <li>سرویس Compose به نام <code>kafka-init</code> در هر <code>up</code> تقریباً همین کار را برای <b>ساخت اولیه</b> انجام می‌دهد.</li>
+        <li>این اسکریپت برای سناریویی است که <code>kafka-init</code> پوشش نمی‌دهد: <b>عریض‌کردن تاپیک‌های از قبل موجود</b> وقتی ترافیک reviews/network از یک consumer فعال بیشتر شود.</li>
+        <li>در <code>docker-compose.yml</code> صریحاً به این اسکریپت برای عملیات <code>--alter</code> ارجاع داده شده است.</li>
+        <li>تولیدکنندگان (Crawler، Network Analyzer) و مصرف‌کننده (Storage Consumer) همگی به همین سه تاپیک وابسته‌اند: <code>app-stats</code>، <code>reviews</code>، <code>network-metrics</code>.</li>
+      </ul>
+
+      <hr>
+      <p><b>۳. چیکارا می‌کند؟</b></p>
+      <ol>
+        <li>به کانتینر <code>project_kafka</code> وصل می‌شود.</li>
+        <li>برای هر تاپیک هدف (پیش‌فرض هر سه، یا فقط آن‌هایی که با <code>--topic</code> تکرار شده‌اند):
+          <ul>
+            <li>اگر نباشد → با <code>--partitions N</code> می‌سازد.</li>
+            <li>اگر باشد و پارتیشن‌ها کافی باشند → OK.</li>
+            <li>اگر باشد و باریک‌تر باشد → هشدار می‌دهد؛ فقط با <code>--alter</code> واقعاً عریض می‌کند.</li>
+          </ul>
+        </li>
+        <li>گزارش نهایی و exit code بر اساس شکست/موفقیت چاپ می‌شود.</li>
+      </ol>
+
+      <hr>
+      <p><b>۴. تصمیمات معماری</b></p>
+      <ul>
+        <li><b>چرا auto-create کافی نیست؟</b> تاپیک auto-created معمولاً <b>یک</b> پارتیشن می‌گیرد. تعداد پارتیشن را بعداً نمی‌شود کم کرد؛ با یک پارتیشن، هر consumer group حداکثر یک عضو فعال دارد. روزی که ترافیک reviews بترکد، به‌جای اضافه کردن کانتینر دوم باید تاپیک را از نو بسازید.</li>
+        <li><b>ساخت عریض از ابتدا رایگان است</b> — هزینهٔ عملیاتی ناچیز در برابر قفل مقیاس‌پذیری.</li>
+        <li><b><code>--alter</code> پیش‌فرض خاموش:</b> تغییر partitioning روی تاپیک زنده می‌تواند توزیع کلیدها و lag را جابه‌جا کند؛ اپراتور باید آگاهانه فعالش کند.</li>
+        <li><b>تکرارپذیری با kafka-init:</b> مسیر Compose برای روز اول؛ این اسکریپت برای روز مقیاس و عملیات دستی.</li>
+      </ul>
+
+      <hr>
+      <p><b>۵. دستورات</b></p>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash"># ساخت / اطمینان از سه تاپیک با ۳ پارتیشن
+./scripts/infra/create_topics.sh
+
+# عریض‌کردن reviews به ۶ پارتیشن
+./scripts/infra/create_topics.sh --topic reviews --partitions 6 --alter
+
+# فقط گزارش وضعیت، بدون alter
+./scripts/infra/create_topics.sh --partitions 3
+
+./scripts/infra/create_topics.sh --help
+</code></pre>
+
+    <div dir="rtl">
+      <p><b>پیش‌نیاز:</b> کانتینر Kafka در حال اجرا:</p>
+    </div>
+<pre class="sourceCode bash"><code class="sourceCode bash">docker compose up -d zookeeper kafka
+</code></pre>
+
+    <div dir="rtl">
+      <hr>
+      <p><a href="script-check-infra.html">← check_infra.sh</a> · <a href="scripts.html">فهرست اسکریپت‌ها</a> · <a href="script-verify-storage-consumer.html">verify_storage_consumer.sh →</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>Project Technical Documentation</footer>
+</body>
+</html>

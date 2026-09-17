@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>run_tests_in_docker.sh | مستندات اسکریپت‌ها</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">مستندات فنی پروژه</a>
+    <nav>
+      <a href="index.html">خانه</a>
+      <a href="application-registry.html">Application Registry</a>
+      <a href="database-schema.html">Database Schema</a>
+      <a href="infra-setup.html">Infrastructure</a>
+      <a href="crawler.html">Crawler</a>
+      <a href="storage-consumer.html">Storage Consumer</a>
+      <a href="sentiment.html">Sentiment</a>
+      <a class="active" href="scripts.html">Scripts</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">
+    <span class="eyebrow">SCRIPTS · DOCKER TEST RUNNER</span>
+    <h1>run_tests_in_docker.sh — اجرای یکپارچهٔ تست‌ها در Docker</h1>
+  </div>
+
+  <article class="doc-content">
+    <div dir="rtl">
+      <p><a href="scripts.html">← بازگشت به فهرست اسکریپت‌ها</a></p>
+      <hr>
+
+      <p><b>مسیر فایل:</b> <code>scripts/run_tests_in_docker.sh</code></p>
+
+      <hr>
+      <p><b>۱. کاراییش به زبان ساده</b></p>
+      <p align="justify">زیرساخت مشترک تست (Postgres، Kafka، app-api) را بالا می‌آورد، منتظر آمادگی‌شان می‌ماند، سپس تمام سرویس‌های تست تعریف‌شده در Compose با پروفایل <code>test</code> را یکی‌یکی با <code>docker compose run</code> اجرا می‌کند. در پایان یک جدول خلاصه با برچسب‌های <b>PASS</b> / <b>FAIL</b> / <b>SKIPPED</b> چاپ می‌کند و exit code کلی را بر اساس شکست‌های واقعی تنظیم می‌کند — بدون اینکه اولین تستِ شکست‌خورده بقیه را قطع کند.</p>
+
+      <hr>
+      <p><b>۲. کجا در پروژه کلی استفاده می‌شود؟</b></p>
+      <ul>
+        <li>راه استاندارد اجرای «همهٔ سوئیت‌های زیرسیستم» روی یک ماشین/CI که Docker دارد، بدون نصب دستی ده‌ها venv.</li>
+        <li>متصل به تعریف سرویس‌های <code>*-tests</code> در <code>docker-compose.yml</code> (پروفایل <code>test</code>).</li>
+        <li>مکمل تست‌های unit محلی هر زیرسیستم: اینجا تمرکز روی اجرای یکنواخت داخل شبکهٔ Compose است.</li>
+        <li>برای developerهایی که می‌خواهند قبل از PR ببینند آیا live/oracle/integrationها هم سبزند.</li>
+      </ul>
+
+      <hr>
+      <p><b>۳. چیکارا می‌کند؟</b></p>
+      <ol>
+        <li>وجود <code>.env</code> ریشه و Docker/Compose را چک می‌کند.</li>
+        <li>سرویس‌های مشترک را up می‌کند و wait می‌زند: Postgres، Kafka، اتمام موفق <code>kafka-init</code>، healthy بودن app-api.</li>
+        <li>به ترتیب سرویس‌های تست را اجرا می‌کند، از جمله (میان موارد دیگر):
+          <ul>
+            <li><code>app-api-tests</code></li>
+            <li><code>crawler-tests</code> و <code>crawler-tests-live</code> (live به Play Store واقعی می‌زند)</li>
+            <li><code>network-analyzer-tests</code>، <code>-live</code>، <code>-oracle</code> (oracle به tshark نیاز دارد)</li>
+            <li><code>storage-consumer-tests</code> و <code>-integration</code></li>
+            <li><code>sentiment-tests</code> و <code>-integration</code></li>
+          </ul>
+        </li>
+        <li>خلاصهٔ نتایج را چاپ می‌کند.</li>
+      </ol>
+
+      <p><b>برچسب‌های خلاصه:</b></p>
+      <table>
+        <thead><tr><th>برچسب</th><th>معنا</th></tr></thead>
+        <tbody>
+          <tr><td>PASS</td><td>سوئیت با exit 0 تمام شد.</td></tr>
+          <tr><td>FAIL</td><td>شکست واقعی تست/اجرا.</td></tr>
+          <tr><td>SKIPPED</td><td>پیش‌نیاز خارجی نیست: اینترنت خروجی فقط برای Play Store داخل <code>crawler-tests-live</code>؛ tshark برای oracle؛ یا image مربوط به sentiment از قبل build نشده — این اسکریپت عمداً sentiment را cold-build نمی‌کند. <code>network-analyzer-tests-live</code> فقط Kafka/App API روی شبکهٔ Compose است و برای «نبود اینترنت» SKIPPED نمی‌شود.</td></tr>
+        </tbody>
+      </table>
+
+      <hr>
+      <p><b>۴. تصمیمات معماری</b></p>
+      <ul>
+        <li><b>ادامه بعد از شکست:</b> مثل smokeهای ops، می‌خواهیم ببینیم «کدام سوئیت‌ها» شکستند نه فقط اولین‌شان.</li>
+        <li><b>زیرساخت مشترک یک‌بار:</b> هر سوئیت جداگانه Postgres/Kafka بالا نیاورد؛ زمان و flakiness کمتر می‌شود.</li>
+        <li><b>تفکیک SKIPPED از FAIL:</b> نبود اینترنت یا image سنگین sentiment نباید کل pipeline را قرمز معنایی کند؛ سیگنال «تست خراب است» باید تمیز بماند.</li>
+        <li><b>عدم cold-build sentiment:</b> image مدل سنگین است؛ مجبور کردن هر developer به build سرد، هزینهٔ نامتناسب می‌سازد. اگر image نباشد → SKIPPED.</li>
+        <li><b><code>--no-build</code>:</b> برای تکرار سریع وقتی imageها از قبل آماده‌اند.</li>
+        <li><b>پروفایل Compose <code>test</code>:</b> سرویس‌های تست وارد استک production روزمره نمی‌شوند مگر عمداً با این اسکریپت/پروفایل.</li>
+      </ul>
+
+      <hr>
+      <p><b>۵. دستورات</b></p>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash"># از ریشهٔ مخزن؛ نیاز به .env
+./scripts/run_tests_in_docker.sh
+
+# بدون rebuild imageها
+./scripts/run_tests_in_docker.sh --no-build
+
+./scripts/run_tests_in_docker.sh --help
+</code></pre>
+
+    <div dir="rtl">
+      <p><b>پیش‌نیاز:</b> فایل <code>.env</code> ریشه؛ Docker Engine + پلاگین Compose. برای liveها: اینترنت خروجی. برای oracle: image با tshark. برای sentiment: image از قبل ساخته‌شده.</p>
+      <hr>
+      <p><a href="script-finalize-cycle-reports.html">← finalize_cycle_reports.py</a> · <a href="scripts.html">فهرست اسکریپت‌ها</a> · <a href="script-manual-sentiment-check.html">manual_sentiment_check.py →</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>Project Technical Documentation</footer>
+</body>
+</html>

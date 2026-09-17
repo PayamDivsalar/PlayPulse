@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>bring_up.sh | مستندات اسکریپت‌ها</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="index.html">مستندات فنی پروژه</a>
+    <nav>
+      <a href="index.html">خانه</a>
+      <a href="application-registry.html">Application Registry</a>
+      <a href="database-schema.html">Database Schema</a>
+      <a href="infra-setup.html">Infrastructure</a>
+      <a href="crawler.html">Crawler</a>
+      <a href="storage-consumer.html">Storage Consumer</a>
+      <a href="sentiment.html">Sentiment</a>
+      <a class="active" href="scripts.html">Scripts</a>
+    </nav>
+  </div>
+</header>
+
+<main class="page">
+  <div class="page-title">
+    <span class="eyebrow">SCRIPTS · BOOTSTRAP</span>
+    <h1>bring_up.sh — راه‌اندازی یک‌دسته‌ای استک</h1>
+  </div>
+
+  <article class="doc-content">
+    <div dir="rtl">
+      <p><a href="scripts.html">← بازگشت به فهرست اسکریپت‌ها</a></p>
+      <hr>
+
+      <p><b>مسیر فایل:</b> <code>scripts/bring_up.sh</code></p>
+
+      <hr>
+      <p><b>۱. کاراییش به زبان ساده</b></p>
+      <p align="justify">این اسکریپت همان دکمهٔ «پروژه را برایم بالا بیاور» است. روی ماشین تازه یا سرور نصب‌شده اجرا می‌شود، فایل‌های محیطی گم‌شده را از نمونه‌ها می‌سازد (بدون بازنویسی فایل‌های موجود)، اعتبارنامه‌های خالی Postgres را پر می‌کند، کل Docker Compose را بالا می‌آورد، منتظر می‌ماند تا سرویس‌ها واقعاً قابل استفاده شوند، و در پایان Smoke Test زیرساخت (<code>check_infra.sh</code>) را اجرا می‌کند. نصب Docker روی سیستم‌عامل را انجام نمی‌دهد؛ آن کار عمداً به اپراتور یا Ansible سپرده شده است.</p>
+
+      <hr>
+      <p><b>۲. کجا در پروژه کلی استفاده می‌شود؟</b></p>
+      <ul>
+        <li>نقطهٔ ورود توصیه‌شده برای <b>راه‌اندازی اولیه</b> و <b>بالا آوردن روزمرهٔ استک</b> (طبق <code>docs/setup.md</code> و <code>scripts/README.md</code>).</li>
+        <li>جایگزین فراخوانی دستی و پراکندهٔ <code>docker compose up</code> برای اپراتورهایی که می‌خواهند env، wait و smoke check یک‌جا انجام شود.</li>
+        <li>با فلگ <code>--with-cycle-reports</code> سرویس Compose به نام <code>cycle-reporter</code> را هم فعال می‌کند که داخلش <code>finalize_cycle_reports.py</code> در حلقه اجرا می‌شود.</li>
+        <li>با فلگ <code>--infra-only</code> فقط لایهٔ داده و ابزارهای کمکی را بالا می‌آورد تا توسعهٔ host/venv روی App API و Crawler ممکن باشد.</li>
+        <li>نیمهٔ Shell از «نصب و راه‌اندازی» است؛ نیمهٔ Ansible در پوشهٔ <code>ansible/</code> عمداً جدا مانده و اینجا صدا زده نمی‌شود.</li>
+      </ul>
+
+      <hr>
+      <p><b>۳. چیکارا می‌کند؟ (مراحل اجرا)</b></p>
+      <ol>
+        <li><b>پیش‌نیازها:</b> وجود <code>docker</code> و پلاگین Compose روی PATH، و در دسترس بودن daemon داکر.</li>
+        <li><b>فایل‌های .env:</b> اگر <code>.env</code> ریشه و envهای زیرسیستم‌ها نباشند، از <code>*.env.example</code> کپی می‌شوند؛ هرگز روی فایل موجود overwrite نمی‌کند.</li>
+        <li><b>اعتبارنامهٔ Postgres:</b> اگر <code>POSTGRES_DB</code> / <code>USER</code> / <code>PASSWORD</code> خالی باشند، مقادیر معقول (و برای پسورد، تصادفی) می‌نویسد و همان را به envهای host-side مربوط به <code>app_api</code> و <code>storage_consumer</code> آینه می‌کند تا mismatch رخ ندهد.</li>
+        <li><b>Compose up:</b>
+          <ul>
+            <li>حالت کامل: infra (<code>postgres</code>، <code>zookeeper</code>، <code>kafka</code>، <code>kafka-init</code>، <code>kafka-ui</code>، <code>metabase</code>) + اپ‌ها (<code>app-api</code>، <code>storage-consumer</code>، <code>crawler</code>) و با پروفایل <code>tools</code> یک‌بار <code>network-analyzer</code>.</li>
+            <li>حالت <code>--infra-only</code>: فقط مجموعهٔ infra بالا.</li>
+          </ul>
+        </li>
+        <li><b>انتظار آمادگی:</b> Postgres، Kafka، App API، Storage Consumer؛ همچنین اطمینان از وجود دیتابیس <code>metabase_app_db</code> (idempotent؛ برای volumeهایی که قبل از init ساخته شده‌اند).</li>
+        <li><b>Smoke check:</b> مگر با <code>--skip-check</code>، اسکریپت <code>scripts/infra/check_infra.sh</code> را صدا می‌زند.</li>
+      </ol>
+      <p align="justify"><b>نکته دربارهٔ network-analyzer:</b> این سرویس یک job دسته‌ای است (inbox را پردازش می‌کند)، نه daemon دائمی. در bring-up کامل یک‌بار با بقیه بالا می‌آید؛ اگر inbox خالی باشد معمولاً سریع خارج می‌شود.</p>
+
+      <hr>
+      <p><b>۴. تصمیمات معماری</b></p>
+      <ul>
+        <li><b>جدا بودن از Ansible:</b> نصب OS/Docker کار provisioning است؛ این اسکریپت فقط bootstrap داخل مخزن کلون‌شده است تا مرز مسئولیت شفاف بماند.</li>
+        <li><b>هرگز overwrite نکردن .env:</b> جلوگیری از از دست رفتن تنظیمات اپراتور روی سرور زنده.</li>
+        <li><b>آینه‌کردن credentials:</b> یک منبع حقیقت برای Postgres در root <code>.env</code>، و همگام‌سازی envهای host تا تست/اجرای محلی گیر نکند.</li>
+        <li><b>Metabase در INFRA نه APP:</b> مثل Kafka UI یک ابزار ops است، فقط به Postgres سالم نیاز دارد، و در حالت <code>--infra-only</code> هم مفید است.</li>
+        <li><b>network-analyzer پشت profile tools:</b> تا استک پیش‌فرض با jobهای دسته‌ای شلوغ نشود، ولی bring_up کامل عمداً آن پروفایل را فعال می‌کند.</li>
+        <li><b>Wait قبل از smoke:</b> «کانتینر بالا آمده» با «سرویس آماده است» یکی نیست؛ بدون wait، check_infra نویز کاذب می‌دهد.</li>
+        <li><b>Exit معنادار از check:</b> اگر smoke fail شود، اپراتور بلافاصله می‌فهمد استک «بالا آمده اما سالم نیست».</li>
+      </ul>
+
+      <hr>
+      <p><b>۵. دستورات</b></p>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash"># از ریشهٔ مخزن
+./scripts/bring_up.sh
+
+# فقط زیرساخت (Postgres / ZooKeeper / Kafka / UI / Metabase)
+./scripts/bring_up.sh --infra-only
+
+# استک کامل + گزارش‌های چرخه (crawler pending + cycle-reporter)
+./scripts/bring_up.sh --with-cycle-reports
+
+# رد کردن smoke check
+./scripts/bring_up.sh --skip-check
+
+# استفاده از imageهای از قبل build‌شده
+./scripts/bring_up.sh --no-build
+
+./scripts/bring_up.sh --help
+</code></pre>
+
+    <div dir="rtl">
+      <p><b>پیش‌نیاز:</b> Docker Engine + پلاگین Compose، اجرا از ریشهٔ کلون مخزن.</p>
+      <p><b>گام بعدی پیشنهادی پس از موفقیت:</b></p>
+    </div>
+
+<pre class="sourceCode bash"><code class="sourceCode bash">./scripts/verify/verify_storage_consumer.sh
+</code></pre>
+
+    <div dir="rtl">
+      <hr>
+      <p><a href="scripts.html">← بازگشت به فهرست اسکریپت‌ها</a> · <a href="script-check-infra.html">مستند check_infra.sh →</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>Project Technical Documentation</footer>
+</body>
+</html>
